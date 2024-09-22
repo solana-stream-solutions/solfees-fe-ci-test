@@ -7,6 +7,7 @@ import { defineConfig } from "vitest/config";
 
 // https://vitejs.dev/config/
 export default defineConfig({
+	base: '/solfees-fe-ci-test/',
 	plugins: [react(), TanStackRouterVite(), 
 		viteStaticCopy({
 		targets: [
