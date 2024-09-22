@@ -16,7 +16,10 @@
   "license": "MIT",
   "version": "1.0.0",
   "type": "module",
+  "homepage": "https://solana-stream-solutions.github.io/solfees-fe-ci-test",
   "scripts": {
+    "predeploy": "pnpm run build",
+    "deploy": "gh-pages -d dist",
     "format": "prettier src/**/*.{ts,tsx} --write",
     "lint": "eslint --max-warnings 0",
     "lint:fix": "eslint --max-warnings 0 --fix",
@@ -95,6 +98,7 @@
     "eslint-plugin-react-refresh": "^0.4.11",
     "eslint-plugin-storybook": "^0.8.0",
     "eslint-plugin-unicorn": "^55.0.0",
+    "gh-pages": "^6.1.1",
     "globals": "^15.9.0",
     "husky": "^9.1.5",
     "jsdom": "^25.0.0",
