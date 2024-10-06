@@ -36,6 +36,8 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@consta/icons": "^1.1.0",
+    "@consta/uikit": "^5.9.2",
     "@hookform/resolvers": "^3.9.0",
     "@nivo/bar": "^0.87.0",
     "@nivo/core": "^0.87.0",

@@ -13,59 +13,75 @@ export const useWebSocketStore = create<WebSocketState>((set) => ({
   connect: () => {
     set(state => {
       if (state.socket) return state
+      fetch('https://api.solfees.io/api/solana', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          method: 'getLatestBlockhash',
+          jsonrpc: '2.0',
+          params: [{ commitment: 'confirmed', min_context_slot: null }],
+          id: '1'
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        const url = 'wss://api.solfees.io/api/solfees/ws'
+        const socket = new WebSocket(url);
 
-      const url = 'wss://api.solfees.io/api/solfees/ws'
-      const socket = new WebSocket(url);
-
-      socket.onopen = () => {
-        socket.send(`{"id":0,"method":"SlotsSubscribe","params":{"readWrite":[],"readOnly":["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"],"levels":[5000,9500]}}`)
-        set({socket});
-      };
-      socket.onclose = () => {
-        set({
-          socket: null,
-        });
-      };
-      socket.onerror = (error) => {
-        console.error("WebSocket error:", error);
-      };
-      socket.onmessage = (event) => {
-        // console.log("WebSocket message:", event.data);
-        const data = JSON.parse(event.data) as any
-        if (data.result.slot) {
-          set(state => {
-            const newSlots = {...state.slots}
-            newSlots[data.result.slot.slot] = data.result.slot
-            return ({
-              ...state,
-              slots: newSlots,
-            })
-          })
-        }
-        if (data.result.status) {
-          set(state => {
-            if (state.slots[data.result.status.slot]) {
+        socket.onopen = () => {
+          socket.send(`{"id":0,"method":"SlotsSubscribe","params":{"readWrite":[],"readOnly":["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"],"levels":[5000,9500]}}`)
+          set({socket});
+        };
+        socket.onclose = () => {
+          set({
+            socket: null,
+          });
+        };
+        socket.onerror = (error) => {
+          console.error("WebSocket error:", error);
+        };
+        socket.onmessage = (event) => {
+          // console.log("WebSocket message:", event.data);
+          const data = JSON.parse(event.data) as any
+          if (data.result.slot) {
+            set(state => {
               const newSlots = {...state.slots}
-              newSlots[data.result.status.slot] = {
-                ...newSlots[data.result.status.slot],
-                commitment: data.result.status.commitment,
-              }
+              newSlots[data.result.slot.slot] = data.result.slot
               return ({
                 ...state,
                 slots: newSlots,
               })
-            }
-            return state;
-          })
-        }
-      };
+            })
+          }
+          if (data.result.status) {
+            set(state => {
+              if (state.slots[data.result.status.slot]) {
+                const newSlots = {...state.slots}
+                newSlots[data.result.status.slot] = {
+                  ...newSlots[data.result.status.slot],
+                  commitment: data.result.status.commitment,
+                }
+                return ({
+                  ...state,
+                  slots: newSlots,
+                })
+              }
+              return state;
+            })
+          }
+        };
 
-      return {
-        ...state,
-        socket,
-      }
+        console.log(data);
+        debugger;
+        // TODO сюда STATE
+
+      })
+      .catch(error => console.error('Error:', error));
+
+      return state;
     })
-
   },
   disconnect: () => {
     set((state) => {
