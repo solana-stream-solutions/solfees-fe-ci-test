@@ -1,82 +1,116 @@
 import {create} from "zustand";
 
+
+export interface SlotContent {
+  commitment:                string;
+  feeAverage:                number;
+  feeLevels:                 number[];
+  hash:                      string;
+  height:                    number;
+  leader:                    string;
+  slot:                      number;
+  time:                      number;
+  totalFee:                  number;
+  totalTransactions:         number;
+  totalTransactionsFiltered: number;
+  totalTransactionsVote:     number;
+  totalUnitsConsumed:        number;
+}
+export interface StatusUpdate {
+  commitment: string;
+  slot:       number;
+}
+
+
 interface WebSocketState {
+  isConnected: boolean;
   socket: WebSocket | null;
   connect: () => void;
   disconnect: () => void;
-  slots: Record<number, any>
+  slots: SlotContent[]
 }
+interface ServerAnswer {
+  result: Array<{slot: SlotContent}>
+}
+
+
 
 export const useWebSocketStore = create<WebSocketState>((set) => ({
   socket: null,
-  slots: {},
+  slots: [],
+  isConnected: false,
   connect: () => {
-    set(state => {
+    set((state: WebSocketState) => {
+      const queue:MessageEvent[] = [];
+
+      // - показываем спин загрузки
+      // - подписываемся на слоты и новые складываем в буфер
+      // - как только пришёл ответ, что подписка сделана, то делаем хттп запрос на все слоты
+      // - убираем спин и показываем ответ что получили
+      // - докидываем слоты из буфера в таблицу
+      // - новые слоты без буфера сразу отправляем в таблицу
+      // - держим максимум 150 последних слотов
       if (state.socket) return state
-      fetch('https://api.solfees.io/api/solana', {
+
+      const url = 'wss://api.solfees.io/api/solfees/ws'
+      const socket = new WebSocket(url);
+
+      socket.onopen = () => {
+        socket.send(`{"id":0,"method":"SlotsSubscribe","params":{"readWrite":[],"readOnly":["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"],"levels":[5000,9500]}}`)
+        set({socket});
+      };
+      socket.onclose = () => {
+        set({
+          socket: null,
+          isConnected: false,
+        });
+      };
+      socket.onerror = (error) => {
+        console.error("WebSocket error:", error);
+      };
+      const handleMessage = (event: MessageEvent) => {
+        const data = JSON.parse(event.data) as any
+        if (data.result.slot) {
+          const update = data.result.slot as SlotContent
+          set((state:WebSocketState) => {
+            const slots = [...state.slots.slice(-149), update]
+            return {...state, slots};
+          })
+          return;
+        }
+        if (data.result.status) {
+          const update = data.result.status as StatusUpdate
+          set((state:WebSocketState) => {
+            const slots = state.slots.map(elt => {
+              if(elt.slot === update.slot) return {...elt, ...update}
+              return elt;
+            })
+            return {...state, slots};
+          })
+          return;
+        }
+        console.log('unrecognized', data);
+      }
+      socket.onmessage = (event) => {
+        queue.push(event)
+      };
+
+
+      fetch('https://api.solfees.io/api/solfees', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({
-          method: 'getLatestBlockhash',
+          method: 'getRecentPrioritizationFees',
           jsonrpc: '2.0',
-          params: [{ commitment: 'confirmed', min_context_slot: null }],
+          params: [],
           id: '1'
         })
       })
-      .then(response => response.json())
-      .then(data => {
-        const url = 'wss://api.solfees.io/api/solfees/ws'
-        const socket = new WebSocket(url);
-
-        socket.onopen = () => {
-          socket.send(`{"id":0,"method":"SlotsSubscribe","params":{"readWrite":[],"readOnly":["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"],"levels":[5000,9500]}}`)
-          set({socket});
-        };
-        socket.onclose = () => {
-          set({
-            socket: null,
-          });
-        };
-        socket.onerror = (error) => {
-          console.error("WebSocket error:", error);
-        };
-        socket.onmessage = (event) => {
-          // console.log("WebSocket message:", event.data);
-          const data = JSON.parse(event.data) as any
-          if (data.result.slot) {
-            set(state => {
-              const newSlots = {...state.slots}
-              newSlots[data.result.slot.slot] = data.result.slot
-              return ({
-                ...state,
-                slots: newSlots,
-              })
-            })
-          }
-          if (data.result.status) {
-            set(state => {
-              if (state.slots[data.result.status.slot]) {
-                const newSlots = {...state.slots}
-                newSlots[data.result.status.slot] = {
-                  ...newSlots[data.result.status.slot],
-                  commitment: data.result.status.commitment,
-                }
-                return ({
-                  ...state,
-                  slots: newSlots,
-                })
-              }
-              return state;
-            })
-          }
-        };
-
-        console.log(data);
-        debugger;
-        // TODO сюда STATE
-
+      .then(response => response.json() as Promise<ServerAnswer>)
+      .then(serverData => {
+        set({isConnected: true, slots: serverData.result.map(elt => elt.slot)})
+        socket.onmessage = handleMessage
+        queue.forEach(handleMessage)
+        queue.length = 0;
       })
       .catch(error => console.error('Error:', error));
 
@@ -88,6 +122,7 @@ export const useWebSocketStore = create<WebSocketState>((set) => ({
       state.socket?.close();
       return {
         socket: null,
+        isConnected: false,
       };
     });
   },

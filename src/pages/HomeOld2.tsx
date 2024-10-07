@@ -60,7 +60,7 @@ export const Home = (): FunctionComponent => {
 			<div className="border-2 border-amber-100 px-2">compute units</div>
 			{Object.values(slots).reverse().map(elt => <Fragment key={elt.slot}>
 				<div className="border-2 border-amber-100 px-2">{elt.slot}</div>
-				<div className="border-2 border-amber-200 px-2"><Commitment commitment={elt.commitment}/></div>
+				<div className="border-2 border-amber-200 px-2"><Commitment commitment={elt.commitment as any}/></div>
 				<div className="border-2 border-amber-200 px-2">{elt.totalUnitsConsumed} ({calcPercent(elt.totalUnitsConsumed / 48_000_000)}%)</div>
 			</Fragment>)}
 		</div>

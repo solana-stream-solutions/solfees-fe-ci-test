@@ -1,6 +1,6 @@
 import type {FunctionComponent} from "../common/types";
-import {CSSProperties, ReactNode, useEffect, useState} from "react";
-import {useWebSocketStore} from "../store/websocketStore.ts";
+import {CSSProperties, ReactNode, useEffect, useMemo, useState} from "react";
+import {SlotContent, useWebSocketStore} from "../store/websocketStore.ts";
 import {Table, TableColumn, TableFilters} from "@consta/uikit/Table";
 import {IconInfoCircle} from '@consta/icons/IconInfoCircle';
 import {IconFunnel} from '@consta/icons/IconFunnel';
@@ -11,17 +11,17 @@ import {Button} from "@consta/uikit/Button";
 import {TooltipProps} from "@consta/uikit/__internal__/src/hocs/withTooltip/withTooltip";
 
 type ComProps = {
-  commitment: 'processed' | 'confirmed' | 'finalized';
+  value: 'processed' | 'confirmed' | 'finalized';
 }
 
 function getIcon(c: 'processed' | 'confirmed' | 'finalized'): string {
   switch (c) {
     case "processed":
-      return '⚒'
+      return '⏳'
     case "confirmed":
-      return '👌'
+      return '✅'
     case "finalized":
-      return '🏁'
+      return '🏆'
     default:
       return '❓'
   }
@@ -48,7 +48,7 @@ function _calcPercent(num: number): string {
   return (num * 100).toFixed(2);
 }
 
-const _Commitment = (props: ComProps) => {
+const Commitment = ({value}: ComProps) => {
   const [isChanging, setIsChanging] = useState(false);
   useEffect(() => {
     setIsChanging(true)
@@ -57,10 +57,18 @@ const _Commitment = (props: ComProps) => {
       setIsChanging(false)
       clearTimeout(q)
     }
-  }, [props.commitment]);
+  }, [value]);
   const classes = 'px-2 ' + (isChanging ? ' bg-amber-200' : '')
-  return <span className={classes}>{getIcon(props.commitment)} {props.commitment}</span>
+  return <span className={classes}>{getIcon(value)}</span>
 }
+
+
+const groupBy = <T, K extends keyof any>(arr: T[], key: (i: T) => K) =>
+  arr.reduce((groups, item) => {
+    // @ts-ignore
+    (groups[key(item)] ||= []).push(item);
+    return groups;
+  }, {} as Record<K, T[]>);
 
 
 const ButtonWithTooltip = withTooltip({content: 'Тултип сверху'})(Button);
@@ -76,8 +84,8 @@ const CustomTable = () => {
           connect,
           disconnect,
           slots,
+    isConnected,
         } = useWebSocketStore();
-  slots;
   useEffect(() => {
     connect();
 
@@ -86,85 +94,34 @@ const CustomTable = () => {
     };
   }, [connect, disconnect]);
 
-  const rows = [
+  const rowsFromSocket = useMemo(() => {
+    const groupByLeader = groupBy(slots, i => i.leader)
+    return Object.entries(groupByLeader).map(([leader, slots]:[string, SlotContent[]], idx) => {
+      return {
+        id: `${idx}`,
+        leader,
+        slot: slots.map(elt => [elt.commitment, elt.slot]),
+        transactions: slots.map(_elt => `????`),
+        computeUnits: slots.map(elt => [elt.totalUnitsConsumed, (elt.totalUnitsConsumed / 48_000_000*100).toFixed(2)]),
+        earnedSol: slots.map(_elt => `????`),
+        averageFee: slots.map(_elt => `????`),
+        feeP50: slots.map(_elt => `????`),
+        feeP90: slots.map(_elt => `????`),
+        add: [],
+      }
+    })
+  }, [slots])
+  const columns: TableColumn<typeof rowsFromSocket[number]>[] = [
     {
-      id: '1',
-      validator: 'Eg4ut7ubhJrt8934eEg4ut7ubhJrt8934e',
-      slot: ['23832818329', '23832818329'],
-      transactions: ['1000/1000', '1000/1000'],
-      computeUnits: ['34,789,456 (54%)', '34,789,456 (54%)'],
-      earnedSol: ['0,00632', '0,00632'],
-      averageFee: ['837,271,28', '837,271,28'],
-      feeP50: ['37,280', '37,280'],
-      feeP90: ['280,194', '280,194'],
-      add: [],
-    }, {
-      id: '2',
-      validator: 'Eg4ut7ubhJrt8934eEg4ut7ubhJrt8934e',
-      slot: ['23832818329', '23832818329'],
-      transactions: ['1000/1000', '1000/1000'],
-      computeUnits: ['34,789,456 (54%)', '34,789,456 (54%)'],
-      earnedSol: ['0,00632', '0,00632'],
-      averageFee: ['837,271,28', '837,271,28'],
-      feeP50: ['37,280', '37,280'],
-      feeP90: ['280,194', '280,194'],
-      add: [],
-    }, {
-      id: '3',
-      validator: 'Eg4ut7ubhJrt8934eEg4ut7ubhJrt8934e',
-      slot: ['23832818329', '23832818329'],
-      transactions: ['1000/1000', '1000/1000'],
-      computeUnits: ['34,789,456 (54%)', '34,789,456 (54%)'],
-      earnedSol: ['0,00632', '0,00632'],
-      averageFee: ['837,271,28', '837,271,28'],
-      feeP50: ['37,280', '37,280'],
-      feeP90: ['280,194', '280,194'],
-      add: [],
-    }, {
-      id: '4',
-      validator: 'Eg4ut7ubhJrt8934eEg4ut7ubhJrt8934e',
-      slot: ['23832818329', '23832818329'],
-      transactions: ['1000/1000', '1000/1000'],
-      computeUnits: ['34,789,456 (54%)', '34,789,456 (54%)'],
-      earnedSol: ['0,00632', '0,00632'],
-      averageFee: ['837,271,28', '837,271,28'],
-      feeP50: ['37,280', '37,280'],
-      feeP90: ['280,194', '280,194'],
-      add: [],
-    }, {
-      id: '5',
-      validator: 'Eg4ut7ubhJrt8934eEg4ut7ubhJrt8934e',
-      slot: ['23832818329', '23832818329'],
-      transactions: ['1000/1000', '1000/1000'],
-      computeUnits: ['34,789,456 (54%)', '34,789,456 (54%)'],
-      earnedSol: ['0,00632', '0,00632'],
-      averageFee: ['837,271,28', '837,271,28'],
-      feeP50: ['37,280', '37,280'],
-      feeP90: ['280,194', '280,194'],
-      add: [],
-    }, {
-      id: '6',
-      validator: 'Eg4ut7ubhJrt8934eEg4ut7ubhJrt8934e',
-      slot: ['23832818329', '23832818329'],
-      transactions: ['1000/1000', '1000/1000'],
-      computeUnits: ['34,789,456 (54%)', '34,789,456 (54%)'],
-      earnedSol: ['0,00632', '0,00632'],
-      averageFee: ['837,271,28', '837,271,28'],
-      feeP50: ['37,280', '37,280'],
-      feeP90: ['280,194', '280,194'],
-      add: [],
-    },
-  ];
-
-  const columns: TableColumn<typeof rows[number]>[] = [
-    {
+      width:'auto' as unknown as number,
       title: 'Validator',
-      accessor: 'validator',
-      renderCell: (row) => <span><span className="font-bold">Validator Name:</span><br/>{row.validator}</span>,
+      accessor: 'leader',
+      renderCell: (row) => <span><span className="font-bold">Validator Name:</span><br/>{row.leader}</span>,
     }, {
+      width:'auto' as unknown as number,
       title: 'Slots',
       accessor: 'slot',
-      renderCell: (row) => <span>{row.slot.map(elt => <div>{elt}</div>)}</span>,
+      renderCell: (row) => <span>{row.slot.map(([commitment, slot]) => <div><Commitment value={commitment as ComProps['value']} /> {slot}</div>)}</span>,
     }, {
       title: 'Transactions',
       accessor: 'transactions',
@@ -175,10 +132,12 @@ const CustomTable = () => {
       renderCell: (row) => <span>{row.transactions.map(elt => <div>{elt}</div>)}</span>,
     }, {
       title: 'Compute Units',
+      width:'auto' as unknown as number,
       accessor: 'computeUnits',
       control: ({column}) => (
         <InfoButton content={column.title as string} direction={'downCenter'}/>),
-      renderCell: (row) => <span>{row.computeUnits.map(elt => <div>{elt}</div>)}</span>,
+      renderCell: (row) => <span className="w-full">{row.computeUnits.map(([amount, percent]) => <div className="flex justify-between gap-1">
+        <span>{amount}</span><span>({percent}%)</span></div>)}</span>,
     }, {
       title: 'Earned SOL',
       accessor: 'earnedSol',
@@ -210,7 +169,7 @@ const CustomTable = () => {
         <Button as="span" iconSize="s" onlyIcon={true} view="clear" iconRight={IconAdd}/>),
     },
   ];
-  const _filters: TableFilters<typeof rows[number]> = [
+  const _filters: TableFilters<typeof rowsFromSocket[number]> = [
     {
       id: 'f-t',
       name: 'trans-filter',
@@ -219,7 +178,9 @@ const CustomTable = () => {
     },
   ];
 
-  return (<Table className="w-full" columns={columns} rows={rows}/>)
+  if(!isConnected || !rowsFromSocket.length) return <span className="w-full text-center text-xl font-bold">Loading...</span>
+
+  return (<Table className="w-full2" columns={columns} rows={rowsFromSocket.reverse()}/>)
 }
 
 
