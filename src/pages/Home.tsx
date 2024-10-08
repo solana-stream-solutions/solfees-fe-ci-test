@@ -78,13 +78,53 @@ const InfoButton = (props: TooltipProps): ReactNode => {
                             tooltipProps={props}/>
 }
 
+const Epoch = () => {
+
+  const {
+          slots,
+        } = useWebSocketStore();
+
+  const number = useMemo(() => {
+    // Массив сортирован, поэтому берём последнее число
+    const [lastSlot] = slots.slice(-1)
+    if(lastSlot) {
+      return (lastSlot.slot / 432_000)|0
+    }
+    return 0
+  }, [slots]);
+  const percent = useMemo(() => {
+    // Массив сортирован, поэтому берём последнее число
+    const [lastSlot] = slots.slice(-1)
+    if(lastSlot) {
+      return ((lastSlot.slot - (number * 432_000)) / 432_000 * 100).toFixed(3) + '%'
+    }
+    return ''
+  }, [slots, number]);
+
+  return <div className="flex-col justify-start items-end gap-1 inline-flex">
+    <div className="self-stretch justify-between items-end inline-flex">
+      <div className="justify-start items-end gap-1 flex">
+        <div className="text-center text-[#002033] text-sm font-normal font-['Inter'] leading-[21px]">Epoch</div>
+        <div className="text-center text-[#09d288] text-xs font-normal font-['Inter'] leading-[18px]">{number || '...'}</div>
+      </div>
+      <div className="text-center text-[#002033] text-[10px] font-normal font-['Inter'] leading-[15px]">in a day
+      </div>
+    </div>
+    <div className="w-[200px] h-[3px] relative overflow-hidden">
+      <div className="w-full h-[3px] left-0 top-0 absolute bg-[#004166]/20 rounded"></div>
+      <div style={{width: percent}} className="h-[3px] left-0 top-0 absolute bg-[#09d288] rounded"></div>
+    </div>
+    <div className="text-[#002033]/60 text-[10px] font-normal font-['Inter'] leading-[15px]">{percent}</div>
+  </div>
+}
+
 
 const CustomTable = () => {
   const {
           connect,
           disconnect,
           slots,
-    isConnected,
+          isConnected,
         } = useWebSocketStore();
   useEffect(() => {
     connect();
@@ -96,13 +136,13 @@ const CustomTable = () => {
 
   const rowsFromSocket = useMemo(() => {
     const groupByLeader = groupBy(slots, i => i.leader)
-    return Object.entries(groupByLeader).map(([leader, slots]:[string, SlotContent[]], idx) => {
+    return Object.entries(groupByLeader).map(([leader, slots]: [string, SlotContent[]], idx) => {
       return {
         id: `${idx}`,
         leader,
         slot: slots.map(elt => [elt.commitment, elt.slot]),
         transactions: slots.map(_elt => `????`),
-        computeUnits: slots.map(elt => [elt.totalUnitsConsumed, (elt.totalUnitsConsumed / 48_000_000*100).toFixed(2)]),
+        computeUnits: slots.map(elt => [elt.totalUnitsConsumed, (elt.totalUnitsConsumed / 48_000_000 * 100).toFixed(2)]),
         earnedSol: slots.map(_elt => `????`),
         averageFee: slots.map(_elt => `????`),
         feeP50: slots.map(_elt => `????`),
@@ -196,21 +236,7 @@ export const Home = (): FunctionComponent => {
             Tracker
           </div>
         </div>
-        <div className="flex-col justify-start items-end gap-1 inline-flex">
-          <div className="self-stretch justify-between items-end inline-flex">
-            <div className="justify-start items-end gap-1 flex">
-              <div className="text-center text-[#002033] text-sm font-normal font-['Inter'] leading-[21px]">Epoch</div>
-              <div className="text-center text-[#09d288] text-xs font-normal font-['Inter'] leading-[18px]">676</div>
-            </div>
-            <div className="text-center text-[#002033] text-[10px] font-normal font-['Inter'] leading-[15px]">in a day
-            </div>
-          </div>
-          <div className="w-[200px] h-[3px] relative">
-            <div className="w-[200px] h-[3px] left-0 top-0 absolute bg-[#004166]/20 rounded"></div>
-            <div className="w-[89px] h-[3px] left-0 top-0 absolute bg-[#09d288] rounded"></div>
-          </div>
-          <div className="text-[#002033]/60 text-[10px] font-normal font-['Inter'] leading-[15px]">48.36%</div>
-        </div>
+        <Epoch/>
       </div>
       <div className="self-stretch justify-start items-center gap-5 inline-flex">
         <div className="w-[413px] h-[300px] relative">
