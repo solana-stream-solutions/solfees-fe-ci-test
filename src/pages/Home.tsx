@@ -9,10 +9,19 @@ import {IconAdd} from '@consta/icons/IconAdd';
 import {withTooltip} from '@consta/uikit/withTooltip';
 import {Button} from "@consta/uikit/Button";
 import {TooltipProps} from "@consta/uikit/__internal__/src/hocs/withTooltip/withTooltip";
+import {Text} from '@consta/uikit/Text';
+import {AnimateIconBase} from "@consta/icons/AnimateIconBase";
+import {IconRoute} from "@consta/icons/IconRoute";
+import {IconPropView} from "@consta/icons/Icon";
+import {IconCheck} from "@consta/icons/IconCheck";
+import {IconAllDone} from "@consta/icons/IconAllDone";
+
+type CommitmentStatus = 'processed' | 'confirmed' | 'finalized';
 
 type ComProps = {
-  value: 'processed' | 'confirmed' | 'finalized';
+  value: CommitmentStatus
 }
+
 
 function getIcon(c: 'processed' | 'confirmed' | 'finalized'): string {
   switch (c) {
@@ -48,7 +57,20 @@ function _calcPercent(num: number): string {
   return (num * 100).toFixed(2);
 }
 
+const statuses: CommitmentStatus[] = ['processed', 'confirmed', 'finalized']
+const colors: IconPropView[] = ['ghost', 'primary', 'success']
+const icons = [IconRoute, IconCheck, IconAllDone]
+export const AnimateIconBaseIcons = ({value}: ComProps) => {
+  const idx = statuses.findIndex(elt => elt === value)
+  return (<AnimateIconBase
+      view={colors[idx] || 'alert'}
+      icons={icons}
+      activeIndex={icons[idx] ? idx : 0}
+    />);
+};
+
 const Commitment = ({value}: ComProps) => {
+
   const [isChanging, setIsChanging] = useState(false);
   useEffect(() => {
     setIsChanging(true)
@@ -58,17 +80,16 @@ const Commitment = ({value}: ComProps) => {
       clearTimeout(q)
     }
   }, [value]);
-  const classes = 'px-2 ' + (isChanging ? ' bg-amber-200' : '')
+  const classes = (isChanging ? ' bg-amber-200' : '')
   return <span className={classes}>{getIcon(value)}</span>
 }
 
 
-const groupBy = <T, K extends keyof any>(arr: T[], key: (i: T) => K) =>
-  arr.reduce((groups, item) => {
-    // @ts-ignore
-    (groups[key(item)] ||= []).push(item);
-    return groups;
-  }, {} as Record<K, T[]>);
+const groupBy = <T, K extends keyof any>(arr: T[], key: (i: T) => K) => arr.reduce((groups, item) => {
+  // @ts-ignore
+  (groups[key(item)] ||= []).push(item);
+  return groups;
+}, {} as Record<K, T[]>);
 
 
 const ButtonWithTooltip = withTooltip({content: 'Тултип сверху'})(Button);
@@ -77,6 +98,22 @@ const InfoButton = (props: TooltipProps): ReactNode => {
   return <ButtonWithTooltip as="span" iconSize="s" onlyIcon={true} view="clear" iconRight={IconInfoCircle}
                             tooltipProps={props}/>
 }
+
+
+function formatDuration(seconds:number) {
+  const days = Math.floor(seconds / (24 * 3600));
+  seconds %= 24 * 3600;
+  const hours = Math.floor(seconds / 3600);
+  seconds %= 3600;
+  const minutes = Math.floor(seconds / 60);
+  seconds %= 60;
+  seconds |= 0;
+
+  return `${days} day(s), ${hours} hour(s), ${minutes} minute(s), ${seconds} second(s)`;
+}
+
+const TextWithTooltip = withTooltip({content: 'Тултип сверху'})(Text);
+
 
 const Epoch = () => {
 
@@ -87,27 +124,58 @@ const Epoch = () => {
   const number = useMemo(() => {
     // Массив сортирован, поэтому берём последнее число
     const [lastSlot] = slots.slice(-1)
-    if(lastSlot) {
-      return (lastSlot.slot / 432_000)|0
+    if (lastSlot) {
+      return (lastSlot.slot / 432_000) | 0
     }
     return 0
   }, [slots]);
   const percent = useMemo(() => {
     // Массив сортирован, поэтому берём последнее число
     const [lastSlot] = slots.slice(-1)
-    if(lastSlot) {
+    if (lastSlot) {
       return ((lastSlot.slot - (number * 432_000)) / 432_000 * 100).toFixed(3) + '%'
     }
     return ''
   }, [slots, number]);
+  const humanCountdown = useMemo(() => {
+    // Массив сортирован, поэтому берём последнее число
+    const [lastSlot] = slots.slice(-1)
+    if (lastSlot) {
+      const rtf = new Intl.RelativeTimeFormat("en", {
+        localeMatcher: "best fit", // other values: "lookup"
+        numeric: "always", // other values: "auto"
+        style: "long", // other values: "short" or "narrow"
+      });
+      const secs = (432_000 - (lastSlot.slot % 432_000)) * 0.471
+      if (secs < 90) return rtf.format(secs, 'seconds') // 1.5 минуты
+      if (secs < (90 * 60)) return rtf.format((secs / 60) | 0, 'minutes') // 1.5ч
+      if (secs < 1.5 * 86_400) return rtf.format((secs / 3_600) | 0, 'hours') // 1.5д
+      return rtf.format((secs / 86_400) | 0, 'days')
+    }
+    return '...';
+  }, [slots])
+  const tooltipForHumanCountdown = useMemo(() => {
+    // Массив сортирован, поэтому берём последнее число
+    const [lastSlot] = slots.slice(-1)
+    if (lastSlot) {
+      const secs = (432_000 - (lastSlot.slot % 432_000)) * 0.471
+      return formatDuration(secs)
+    }
+    return '...'
+  }, [slots])
 
   return <div className="flex-col justify-start items-end gap-1 inline-flex">
     <div className="self-stretch justify-between items-end inline-flex">
       <div className="justify-start items-end gap-1 flex">
         <div className="text-center text-[#002033] text-sm font-normal font-['Inter'] leading-[21px]">Epoch</div>
-        <div className="text-center text-[#09d288] text-xs font-normal font-['Inter'] leading-[18px]">{number || '...'}</div>
+        <div
+          className="text-center text-[#09d288] text-xs font-normal font-['Inter'] leading-[18px]">{number || '...'}</div>
       </div>
-      <div className="text-center text-[#002033] text-[10px] font-normal font-['Inter'] leading-[15px]">in a day
+      <div className="text-center text-[#002033] text-[10px] font-normal font-['Inter'] leading-[15px]">
+        <TextWithTooltip tooltipProps={{
+          content: tooltipForHumanCountdown,
+          direction: 'downCenter',
+        }}>{humanCountdown}</TextWithTooltip>
       </div>
     </div>
     <div className="w-[200px] h-[3px] relative overflow-hidden">
@@ -118,6 +186,28 @@ const Epoch = () => {
   </div>
 }
 
+
+function append(rawSlots: SlotContent[]): SlotContent[] {
+  while (rawSlots.length < 4) {
+    const value: SlotContent = {
+      "commitment": "unknown",
+      "feeAverage": 0,
+      "feeLevels": [],
+      "hash": `unknown-${Math.random()}`,
+      "height": 0,
+      "leader": '',
+      "slot": 0,
+      "time": 0,
+      "totalFee": 0,
+      "totalTransactions": 0,
+      "totalTransactionsFiltered": 0,
+      "totalTransactionsVote": 0,
+      "totalUnitsConsumed": 0,
+    }
+    rawSlots.unshift(value)
+  }
+  return rawSlots
+}
 
 const CustomTable = () => {
   const {
@@ -135,33 +225,67 @@ const CustomTable = () => {
   }, [connect, disconnect]);
 
   const rowsFromSocket = useMemo(() => {
-    const groupByLeader = groupBy(slots, i => i.leader)
-    return Object.entries(groupByLeader).map(([leader, slots]: [string, SlotContent[]], idx) => {
-      return {
-        id: `${idx}`,
+    const groupByLeader: Record<string, {slots: SlotContent[], leader: string}> = {}
+    let slice:SlotContent[] = [];
+    let currentLeader = slots[0]?.leader || ''
+    for (let i = 0; i < slots.length; i++) {
+      if (currentLeader === slots[i]?.leader && slice.length < 4) {
+        slice.push(slots[i] as SlotContent)
+      } else {
+        groupByLeader[i] = {
+          slots: slice.reverse(),
+          leader: currentLeader,
+        }
+        slice = [slots[i] as SlotContent]
+        currentLeader = slots[i]?.leader || ''
+      }
+    }
+    // Кладем хвостик, который остался не прибитый
+    // Если будут фильтры, то возможно не нужен трешхолд такой
+    if (slice.length > 0) groupByLeader['last'] = {
+      slots: slice.reverse(),
+      leader: currentLeader,
+    };
+
+    return Object.entries(groupByLeader).map(([
+                                                _, {
+        slots,
         leader,
-        slot: slots.map(elt => [elt.commitment, elt.slot]),
-        transactions: slots.map(_elt => `????`),
-        computeUnits: slots.map(elt => [elt.totalUnitsConsumed, (elt.totalUnitsConsumed / 48_000_000 * 100).toFixed(2)]),
-        earnedSol: slots.map(_elt => `????`),
-        averageFee: slots.map(_elt => `????`),
-        feeP50: slots.map(_elt => `????`),
-        feeP90: slots.map(_elt => `????`),
+      },
+                                              ]: [
+      string, {
+        slots: SlotContent[],
+        leader: string
+      }
+    ]) => {
+      // let slots = rawSlots.length === 4 ? rawSlots : append(rawSlots)
+      return {
+        id: `${leader}-${slots[0]?.slot || 'empty'}`,
+        leader,
+        slot: slots.map(elt => [elt.commitment, elt.slot.toLocaleString('en-US')]),
+        transactions: slots.map(elt => `${elt.totalTransactions - elt.totalTransactionsVote} / ${elt.totalTransactions}`),
+        computeUnits: slots.map(elt => [elt.totalUnitsConsumed.toLocaleString('en-US'), (elt.totalUnitsConsumed / 48_000_000 * 100).toFixed(2)]),
+        earnedSol: slots.map(elt => elt.totalFee),
+        averageFee: slots.map(elt => elt.feeAverage), // TODO надо по другому высчитывать, имена колонок и всякое такое
+        feeP50: slots.map(elt => elt.feeLevels[0]),
+        feeP90: slots.map(elt => elt.feeLevels[1]),
         add: [],
       }
     })
   }, [slots])
   const columns: TableColumn<typeof rowsFromSocket[number]>[] = [
     {
-      width:'auto' as unknown as number,
+      width: 'auto' as unknown as number,
       title: 'Validator',
       accessor: 'leader',
       renderCell: (row) => <span><span className="font-bold">Validator Name:</span><br/>{row.leader}</span>,
     }, {
-      width:'auto' as unknown as number,
+      width: 'auto' as unknown as number,
       title: 'Slots',
       accessor: 'slot',
-      renderCell: (row) => <span>{row.slot.map(([commitment, slot]) => <div><Commitment value={commitment as ComProps['value']} /> {slot}</div>)}</span>,
+      renderCell: (row) => <span>{row.slot.map(([commitment, slot]) => <span
+        className="flex justify-between gap-1"><AnimateIconBaseIcons
+        value={commitment as CommitmentStatus}/> {slot}</span>)}</span>,
     }, {
       title: 'Transactions',
       accessor: 'transactions',
@@ -172,41 +296,36 @@ const CustomTable = () => {
       renderCell: (row) => <span>{row.transactions.map(elt => <div>{elt}</div>)}</span>,
     }, {
       title: 'Compute Units',
-      width:'auto' as unknown as number,
+      width: 'auto' as unknown as number,
       accessor: 'computeUnits',
-      control: ({column}) => (
-        <InfoButton content={column.title as string} direction={'downCenter'}/>),
-      renderCell: (row) => <span className="w-full">{row.computeUnits.map(([amount, percent]) => <div className="flex justify-between gap-1">
-        <span>{amount}</span><span>({percent}%)</span></div>)}</span>,
+      control: ({column}) => (<InfoButton content={column.title as string} direction={'downCenter'}/>),
+      renderCell: (row) => <span className="w-full">{row.computeUnits.map(([amount, percent]) => <div
+        className="flex justify-between text-right gap-1">
+        <Text font="mono">{amount}</Text><span>({percent}%)</span></div>)}</span>,
     }, {
       title: 'Earned SOL',
       accessor: 'earnedSol',
-      control: ({column}) => (
-        <InfoButton content={column.title as string} direction={'downCenter'}/>),
+      control: ({column}) => (<InfoButton content={column.title as string} direction={'downCenter'}/>),
       renderCell: (row) => <span>{row.earnedSol.map(elt => <div>{elt}</div>)}</span>,
     }, {
       title: 'Average Fee',
       accessor: 'averageFee',
-      control: ({column}) => (
-        <InfoButton content={column.title as string} direction={'downCenter'}/>),
+      control: ({column}) => (<InfoButton content={column.title as string} direction={'downCenter'}/>),
       renderCell: (row) => <span>{row.averageFee.map(elt => <div>{elt}</div>)}</span>,
     }, {
       title: 'Fee p50',
       accessor: 'feeP50',
-      control: () => (
-        <Button as="span" iconSize="s" onlyIcon={true} view="clear" iconRight={IconEdit}/>),
+      control: () => (<Button as="span" iconSize="s" onlyIcon={true} view="clear" iconRight={IconEdit}/>),
       renderCell: (row) => <span>{row.feeP50.map(elt => <div>{elt}</div>)}</span>,
     }, {
       title: 'Fee p90',
       accessor: 'feeP90',
-      control: () => (
-        <Button as="span" iconSize="s" onlyIcon={true} view="clear" iconRight={IconEdit}/>),
+      control: () => (<Button as="span" iconSize="s" onlyIcon={true} view="clear" iconRight={IconEdit}/>),
       renderCell: (row) => <span>{row.feeP90.map(elt => <div>{elt}</div>)}</span>,
     }, {
       title: 'Add',
       accessor: 'add',
-      control: () => (
-        <Button as="span" iconSize="s" onlyIcon={true} view="clear" iconRight={IconAdd}/>),
+      control: () => (<Button as="span" iconSize="s" onlyIcon={true} view="clear" iconRight={IconAdd}/>),
     },
   ];
   const _filters: TableFilters<typeof rowsFromSocket[number]> = [
@@ -218,7 +337,8 @@ const CustomTable = () => {
     },
   ];
 
-  if(!isConnected || !rowsFromSocket.length) return <span className="w-full text-center text-xl font-bold">Loading...</span>
+  if (!isConnected || !rowsFromSocket.length) return <span
+    className="w-full text-center text-xl font-bold">Loading...</span>
 
   return (<Table className="w-full2" columns={columns} rows={rowsFromSocket.reverse()}/>)
 }
