@@ -11,6 +11,9 @@ importers:
       '@consta/icons':
         specifier: ^1.1.0
         version: 1.1.0(@consta/uikit@5.9.2)
+      '@consta/table':
+        specifier: ^0.0.1
+        version: 0.0.1
       '@consta/uikit':
         specifier: ^5.9.2
         version: 5.9.2(@bem-react/classname@1.6.0)(@bem-react/classnames@1.3.10)(@consta/icons@1.1.0)(compute-scroll-into-view@1.0.20)(date-fns@2.30.0)(react-dom@18.3.1(react@18.3.1))(react-dropzone@14.2.9(react@18.3.1))(react-imask@7.6.1(react@18.3.1))(react-textarea-autosize@8.5.3(@types/react@18.3.5)(react@18.3.1))(react-transition-group@4.4.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)
@@ -963,6 +966,9 @@ packages:
     resolution: {integrity: sha512-vsv41yw3atSzXfrmu9rJSNvcxjChrFau0IMAP/4nxBPzF7AIFx9Jf94ZtOOmK+st0NN/HXqKkaFMey6rYXTUCQ==}
     peerDependencies:
       '@consta/uikit': ^5.0.0
+
+  '@consta/table@0.0.1':
+    resolution: {integrity: sha512-foYdWEaB8iLW2mtWjAZ/H7D2nDSrKgF0xJqMLM9x1gi4fuqrZgFuqognXvJdg/ptInp5qK1P/5+sZuLGj7iwYg==}
 
   '@consta/uikit@5.9.2':
     resolution: {integrity: sha512-YMlhka8AmQXrXF/lUfaLXeYm8+EEhzpNFdXjhAK4ZLN2KaJdYm5i4XCbSDmhi5wqkwyRHCyH3FGSbY9/3oRbEg==}
@@ -6609,6 +6615,8 @@ snapshots:
   '@consta/icons@1.1.0(@consta/uikit@5.9.2)':
     dependencies:
       '@consta/uikit': 5.9.2(@bem-react/classname@1.6.0)(@bem-react/classnames@1.3.10)(@consta/icons@1.1.0)(compute-scroll-into-view@1.0.20)(date-fns@2.30.0)(react-dom@18.3.1(react@18.3.1))(react-dropzone@14.2.9(react@18.3.1))(react-imask@7.6.1(react@18.3.1))(react-textarea-autosize@8.5.3(@types/react@18.3.5)(react@18.3.1))(react-transition-group@4.4.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)
+
+  '@consta/table@0.0.1': {}
 
   '@consta/uikit@5.9.2(@bem-react/classname@1.6.0)(@bem-react/classnames@1.3.10)(@consta/icons@1.1.0)(compute-scroll-into-view@1.0.20)(date-fns@2.30.0)(react-dom@18.3.1(react@18.3.1))(react-dropzone@14.2.9(react@18.3.1))(react-imask@7.6.1(react@18.3.1))(react-textarea-autosize@8.5.3(@types/react@18.3.5)(react@18.3.1))(react-transition-group@4.4.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)':
     dependencies:

@@ -1,7 +1,7 @@
 import type {FunctionComponent} from "../common/types";
-import {CSSProperties, ReactNode, useEffect, useMemo, useState} from "react";
+import {CSSProperties, ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useState} from "react";
 import {SlotContent, useWebSocketStore} from "../store/websocketStore.ts";
-import {Table, TableColumn, TableFilters} from "@consta/uikit/Table";
+import {Table, TableColumn} from '@consta/table/Table';
 import {IconInfoCircle} from '@consta/icons/IconInfoCircle';
 import {IconFunnel} from '@consta/icons/IconFunnel';
 import {IconEdit} from '@consta/icons/IconEdit';
@@ -10,36 +10,19 @@ import {withTooltip} from '@consta/uikit/withTooltip';
 import {Button} from "@consta/uikit/Button";
 import {TooltipProps} from "@consta/uikit/__internal__/src/hocs/withTooltip/withTooltip";
 import {Text} from '@consta/uikit/Text';
-import {AnimateIconBase} from "@consta/icons/AnimateIconBase";
-import {IconRoute} from "@consta/icons/IconRoute";
-import {IconPropView} from "@consta/icons/Icon";
-import {IconCheck} from "@consta/icons/IconCheck";
-import {IconAllDone} from "@consta/icons/IconAllDone";
 import {Modal} from "@consta/uikit/Modal";
 import {useFlag} from "@consta/uikit/useFlag";
 import {TextField} from "@consta/uikit/TextField";
 import {Chips} from "@consta/uikit/Chips";
+import {Validator} from "../components/ui/Validator.tsx";
+import {Slots} from "../components/ui/Slots.tsx";
+import {Transactions} from "../components/ui/Transactions.tsx";
+import {ComputeUnits} from "../components/ui/ComputeUnits.tsx";
+import {Epoch} from "../components/ui/Epoch.tsx";
+import {HeaderDataCell} from "@consta/table/HeaderDataCell";
+import {SimpleCell} from "../components/ui/SimpleCell.tsx";
+import {useNavigate} from "@tanstack/react-router";
 
-
-type CommitmentStatus = 'processed' | 'confirmed' | 'finalized';
-
-type ComProps = {
-  value: CommitmentStatus
-}
-
-
-function getIcon(c: 'processed' | 'confirmed' | 'finalized'): string {
-  switch (c) {
-    case "processed":
-      return '⏳'
-    case "confirmed":
-      return '✅'
-    case "finalized":
-      return '🏆'
-    default:
-      return '❓'
-  }
-}
 
 const IconFeed = ({className = ''}): ReactNode => {
   return <svg className={className} width="20" height="21" viewBox="0 0 20 21" fill="none"
@@ -58,45 +41,6 @@ const IconFeed = ({className = ''}): ReactNode => {
 
 }
 
-function _calcPercent(num: number): string {
-  return (num * 100).toFixed(2);
-}
-
-const statuses: CommitmentStatus[] = ['processed', 'confirmed', 'finalized']
-const colors: IconPropView[] = ['ghost', 'primary', 'success']
-const icons = [IconRoute, IconCheck, IconAllDone]
-export const AnimateIconBaseIcons = ({value}: ComProps) => {
-  const idx = statuses.findIndex(elt => elt === value)
-  return (<AnimateIconBase
-      view={colors[idx] || 'alert'}
-      icons={icons}
-      activeIndex={icons[idx] ? idx : 0}
-    />);
-};
-
-const Commitment = ({value}: ComProps) => {
-
-  const [isChanging, setIsChanging] = useState(false);
-  useEffect(() => {
-    setIsChanging(true)
-    const q = setTimeout(() => setIsChanging(false), 300)
-    return () => {
-      setIsChanging(false)
-      clearTimeout(q)
-    }
-  }, [value]);
-  const classes = (isChanging ? ' bg-amber-200' : '')
-  return <span className={classes}>{getIcon(value)}</span>
-}
-
-
-const groupBy = <T, K extends keyof any>(arr: T[], key: (i: T) => K) => arr.reduce((groups, item) => {
-  // @ts-ignore
-  (groups[key(item)] ||= []).push(item);
-  return groups;
-}, {} as Record<K, T[]>);
-
-
 const ButtonWithTooltip = withTooltip({content: 'Тултип сверху'})(Button);
 
 const InfoButton = (props: TooltipProps): ReactNode => {
@@ -105,116 +49,15 @@ const InfoButton = (props: TooltipProps): ReactNode => {
 }
 
 
-function formatDuration(seconds:number) {
-  const days = Math.floor(seconds / (24 * 3600));
-  seconds %= 24 * 3600;
-  const hours = Math.floor(seconds / 3600);
-  seconds %= 3600;
-  const minutes = Math.floor(seconds / 60);
-  seconds %= 60;
-  seconds |= 0;
-
-  return `${days} day(s), ${hours} hour(s), ${minutes} minute(s), ${seconds} second(s)`;
-}
-
-const TextWithTooltip = withTooltip({content: 'Тултип сверху'})(Text);
-
-
-const Epoch = () => {
-
-  const {
-          slots,
-        } = useWebSocketStore();
-
-  const number = useMemo(() => {
-    // Массив сортирован, поэтому берём последнее число
-    const [lastSlot] = slots.slice(-1)
-    if (lastSlot) {
-      return (lastSlot.slot / 432_000) | 0
-    }
-    return 0
-  }, [slots]);
-  const percent = useMemo(() => {
-    // Массив сортирован, поэтому берём последнее число
-    const [lastSlot] = slots.slice(-1)
-    if (lastSlot) {
-      return ((lastSlot.slot - (number * 432_000)) / 432_000 * 100).toFixed(3) + '%'
-    }
-    return ''
-  }, [slots, number]);
-  const humanCountdown = useMemo(() => {
-    // Массив сортирован, поэтому берём последнее число
-    const [lastSlot] = slots.slice(-1)
-    if (lastSlot) {
-      const rtf = new Intl.RelativeTimeFormat("en", {
-        localeMatcher: "best fit", // other values: "lookup"
-        numeric: "always", // other values: "auto"
-        style: "long", // other values: "short" or "narrow"
-      });
-      const secs = (432_000 - (lastSlot.slot % 432_000)) * 0.4
-      if (secs < 90) return rtf.format(secs, 'seconds') // 1.5 минуты
-      if (secs < (90 * 60)) return rtf.format((secs / 60) | 0, 'minutes') // 1.5ч
-      if (secs < 1.5 * 86_400) return rtf.format((secs / 3_600) | 0, 'hours') // 1.5д
-      return rtf.format((secs / 86_400) | 0, 'days')
-    }
-    return '...';
-  }, [slots])
-  const tooltipForHumanCountdown = useMemo(() => {
-    // Массив сортирован, поэтому берём последнее число
-    const [lastSlot] = slots.slice(-1)
-    if (lastSlot) {
-      const secs = (432_000 - (lastSlot.slot % 432_000)) * 0.471
-      return formatDuration(secs)+'. Based on slot duration equals 400ms.'
-    }
-    return '...'
-  }, [slots])
-
-  return <div className="flex-col justify-start items-end gap-1 inline-flex">
-    <div className="self-stretch justify-between items-end inline-flex">
-      <div className="justify-start items-end gap-1 flex">
-        <div className="text-center text-[#002033] text-sm font-normal font-['Inter'] leading-[21px]">Epoch</div>
-        <div
-          className="text-center text-[#09d288] text-xs font-normal font-['Inter'] leading-[18px]">{number || '...'}</div>
-      </div>
-      <div className="text-center text-[#002033] text-[10px] font-normal font-['Inter'] leading-[15px]">
-        <TextWithTooltip tooltipProps={{
-          content: tooltipForHumanCountdown,
-          direction: 'downCenter',
-        }}>{humanCountdown}</TextWithTooltip>
-      </div>
-    </div>
-    <div className="w-[200px] h-[3px] relative overflow-hidden">
-      <div className="w-full h-[3px] left-0 top-0 absolute bg-[#004166]/20 rounded"></div>
-      <div style={{width: percent}} className="h-[3px] left-0 top-0 absolute bg-[#09d288] rounded"></div>
-    </div>
-    <div className="text-[#002033]/60 text-[10px] font-normal font-['Inter'] leading-[15px]">{percent}</div>
-  </div>
-}
-
-
-function append(rawSlots: SlotContent[]): SlotContent[] {
-  while (rawSlots.length < 4) {
-    const value: SlotContent = {
-      "commitment": "unknown",
-      "feeAverage": 0,
-      "feeLevels": [],
-      "hash": `unknown-${Math.random()}`,
-      "height": 0,
-      "leader": '',
-      "slot": 0,
-      "time": 0,
-      "totalFee": 0,
-      "totalTransactions": 0,
-      "totalTransactionsFiltered": 0,
-      "totalTransactionsVote": 0,
-      "totalUnitsConsumed": 0,
-    }
-    rawSlots.unshift(value)
+const percentFromStore = (num?: number): number => {
+  if (num) {
+    const value = num / 100;
+    return value;
   }
-  return rawSlots
+  return 0;
 }
 
-function buildTransactions(slots:SlotContent[]) {
+function buildTransactions(slots: SlotContent[]) {
   const first = slots.map(elt => elt.totalTransactions - elt.totalTransactionsVote)
   const maxFirst = `${Math.max(...first)}`.length
   const second = slots.map(elt => elt.totalTransactions)
@@ -227,24 +70,32 @@ function buildTransactions(slots:SlotContent[]) {
   return aligned
 }
 
-const CustomTable = () => {
-  const {
-          connect,
-          disconnect,
-          slots,
-          isConnected,
-        } = useWebSocketStore();
-  useEffect(() => {
-    connect();
+type TableProps = {
+  onEditFee: (idx: number) => void
+  onEditKeys: () => void
+}
 
-    return () => {
-      disconnect();
-    };
-  }, [connect, disconnect]);
+
+const CustomTable = ({
+                       onEditFee,
+                       onEditKeys,
+                     }: TableProps) => {
+  const slots = useWebSocketStore(state => state.slots);
+  const disconnect = useWebSocketStore(state => state.disconnect)
+  const connect = useWebSocketStore(state => state.connect)
+  const percents = useWebSocketStore(state => state.percents)
+  const readonlyKeys = useWebSocketStore(state => state.readonlyKeys)
+  const readwriteKeys = useWebSocketStore(state => state.readwriteKeys)
+
+  const memoFee0 = useCallback(() => onEditFee(0), [onEditFee])
+  const memoFee1 = useCallback(() => onEditFee(1), [onEditFee])
 
   const rowsFromSocket = useMemo(() => {
-    const groupByLeader: Record<string, {slots: SlotContent[], leader: string}> = {}
-    let slice:SlotContent[] = [];
+    const groupByLeader: Record<string, {
+      slots: SlotContent[],
+      leader: string
+    }> = {}
+    let slice: SlotContent[] = [];
     let currentLeader = slots[0]?.leader || ''
     for (let i = 0; i < slots.length; i++) {
       if (currentLeader === slots[i]?.leader && slice.length < 4) {
@@ -280,151 +131,295 @@ const CustomTable = () => {
       return {
         id: `${leader}-${slots[0]?.slot || 'empty'}`,
         leader,
-        slot: slots.map(elt => [elt.commitment, elt.slot.toLocaleString('en-US')]),
+        slots: slots.map(elt => ({
+          commitment: elt.commitment,
+          slot: elt.slot,
+        })),
         transactions: buildTransactions(slots),
-        computeUnits: slots.map(elt => [elt.totalUnitsConsumed.toLocaleString('en-US'), (elt.totalUnitsConsumed / 48_000_000 * 100).toFixed(2)]),
+        computeUnits: slots.map(elt => ({
+          amount: elt.totalUnitsConsumed.toLocaleString('en-US'),
+          percent: (elt.totalUnitsConsumed / 48_000_000 * 100).toFixed(2),
+        })),
         earnedSol: slots.map(elt => elt.totalFee),
         averageFee: slots.map(elt => elt.feeAverage.toFixed(2)),
-        feeP50: slots.map(elt => elt.feeLevels[0]), // TODO надо по другому высчитывать, имена колонок и всякое такое
-        feeP90: slots.map(elt => elt.feeLevels[1]), // TODO надо по другому высчитывать, имена колонок и всякое такое
+        fee0: slots.map(elt => elt.feeLevels[0] || 0),
+        fee1: slots.map(elt => elt.feeLevels[1] || 0),
         add: [],
       }
     })
   }, [slots])
-  const columns: TableColumn<typeof rowsFromSocket[number]>[] = [
-    {
-      width: 'auto' as unknown as number,
-      title: 'Validator',
-      accessor: 'leader',
-      renderCell: (row) => <span><span className="font-bold">Validator Name:</span><br/>{row.leader}</span>,
-    }, {
-      width: 'auto' as unknown as number,
-      align: 'right',
-      title: 'Slots',
-      accessor: 'slot',
-      renderCell: (row) => <span>{row.slot.map(([commitment, slot]) => <span
-        className="flex justify-between gap-1"><AnimateIconBaseIcons
-        value={commitment as CommitmentStatus}/> {slot}</span>)}</span>,
-    }, {
-      title: 'Transactions',
-      accessor: 'transactions',
-      align: 'right',
-      control: () => (<Button style={{
-        '--button-color': 'red',
-        '--button-color-hover': 'darkred',
-      } as unknown as CSSProperties} view="clear" size="s" onlyIcon iconRight={IconFunnel}/>),
-      renderCell: (row) => <span>{row.transactions.map(elt => <Text font="mono" className="whitespace-pre">{elt}</Text>)}</span>,
-    }, {
-      title: 'Compute Units',
-      width: 'auto' as unknown as number,
-      align: 'right',
-      accessor: 'computeUnits',
-      control: ({column}) => (<InfoButton content={column.title as string} direction={'downCenter'}/>),
-      renderCell: (row) => <span className="w-full">{row.computeUnits.map(([amount, percent]) => <div
-        className="flex justify-end text-right gap-1">
-        <Text font="mono">{amount}</Text><Text font="mono">({percent}%)</Text></div>)}</span>,
-    }, {
-      title: 'Earned SOL',
-      align: 'right',
-      accessor: 'earnedSol',
-      control: ({column}) => (<InfoButton content={column.title as string} direction={'downCenter'}/>),
-      renderCell: (row) => <Text font="mono">{row.earnedSol.map(elt => <div>{elt}</div>)}</Text>,
-    }, {
-      title: 'Average Fee',
-      accessor: 'averageFee',
-      align: 'right',
-      control: ({column}) => (<InfoButton content={column.title as string} direction={'downCenter'}/>),
-      renderCell: (row) => <Text font="mono">{row.averageFee.map(elt => <div>{elt}</div>)}</Text>,
-    }, {
-      title: 'Fee p50',
-      accessor: 'feeP50',
-      align: 'right',
-      control: () => (<Button as="span" iconSize="s" onlyIcon={true} view="clear" iconRight={IconEdit}/>),
-      renderCell: (row) => <span>{row.feeP50.map(elt => <div>{elt}</div>)}</span>,
-    }, {
-      title: 'Fee p90',
-      accessor: 'feeP90',
-      align: 'right',
-      control: () => (<Button as="span" iconSize="s" onlyIcon={true} view="clear" iconRight={IconEdit}/>),
-      renderCell: (row) => <span>{row.feeP90.map(elt => <div>{elt}</div>)}</span>,
-    }, {
-      title: 'Add',
-      accessor: 'add',
-      control: () => (<Button as="span" iconSize="s" onlyIcon={true} view="clear" iconRight={IconAdd}/>),
-    },
-  ];
-  const _filters: TableFilters<typeof rowsFromSocket[number]> = [
-    {
-      id: 'f-t',
-      name: 'trans-filter',
-      filterer: (value) => value === 'Антон',
-      field: 'transactions',
-    },
-  ];
+  const isTransactionsApplied = useMemo(() => {
+    return !!readwriteKeys.length || !!readonlyKeys.length
+  }, [readwriteKeys.length, readonlyKeys.length])
+  const columns: TableColumn<typeof rowsFromSocket[number]>[] = useMemo(() => {
+    return [
+      {
+        title: 'Validator',
+        accessor: 'leader',
+        minWidth: 490,
+        renderCell: ({row}) => <Validator leader={row.leader}/>,
+      }, {
+        width: 'auto',
+        minWidth: 170,
+        title: 'Slots',
+        accessor: 'slots',
+        renderCell: ({row}) => <Slots items={row.slots}/>,
+      }, {
+        title: 'Transactions',
+        accessor: 'transactions',
+        width: 'auto',
+        minWidth: 160,
+        renderHeaderCell: ({title}) => <HeaderDataCell
+          controlRight={[
+            <Button style={{
+              '--button-color': isTransactionsApplied ? 'red' : undefined,
+              '--button-color-hover': isTransactionsApplied ? 'darkred' : undefined,
+            } as unknown as CSSProperties} view="clear" size="s" onlyIcon iconRight={IconFunnel} onClick={onEditKeys}/>,
+          ]}
+        >
+          {title}
+        </HeaderDataCell>,
+        renderCell: ({row}) => <Transactions items={row.transactions}/>,
+      }, {
+        title: 'Compute Units',
+        width: 'auto',
+        minWidth: 190,
+        accessor: 'computeUnits',
+        renderHeaderCell: ({title}) => <HeaderDataCell
+          controlRight={[
+            <InfoButton content={title as string} direction={'downCenter'}/>,
+          ]}
+        >
+          {title}
+        </HeaderDataCell>,
+        renderCell: ({row}) => <ComputeUnits items={row.computeUnits}/>,
+      }, {
+        width: 'auto',
+        title: 'Earned SOL',
+        minWidth: 160,
+        accessor: 'earnedSol',
+        renderHeaderCell: ({title}) => <HeaderDataCell
+          controlRight={[
+            <InfoButton content={title as string} direction={'downCenter'}/>,
+          ]}
+        >
+          {title}
+        </HeaderDataCell>,
+        renderCell: ({row}) => <SimpleCell list={row.earnedSol}/>,
 
-  if (!isConnected || !rowsFromSocket.length) return <span
+      }, {
+        title: 'Average Fee',
+        minWidth: 160,
+        accessor: 'averageFee',
+        width: 'auto',
+
+        renderHeaderCell: ({title}) => <HeaderDataCell
+          controlRight={[
+            <InfoButton content={title as string} direction={'downCenter'}/>,
+          ]}
+        >
+          {title}
+        </HeaderDataCell>,
+        renderCell: ({row}) => <SimpleCell list={row.averageFee}/>,
+
+      }, {
+        width: 'auto',
+        minWidth: 160,
+
+        title: 'Fee p' + percentFromStore(percents[0]),
+        accessor: 'fee0',
+        renderHeaderCell: ({title}) => <HeaderDataCell
+          controlRight={[
+            <Button as="span" iconSize="s" onlyIcon={true} view="clear" iconRight={IconEdit}
+                    onClick={memoFee0}/>,
+          ]}
+        >
+          {title}
+        </HeaderDataCell>,
+        renderCell: ({row}) => <SimpleCell list={row.fee0}/>,
+
+      }, {
+        width: 'auto',
+        minWidth: 160,
+
+        title: 'Fee p' + percentFromStore(percents[1]),
+        accessor: 'fee1',
+        renderHeaderCell: ({title}) => <HeaderDataCell
+          controlRight={[
+            <Button as="span" iconSize="s" onlyIcon={true} view="clear" iconRight={IconEdit}
+                    onClick={memoFee1}/>,
+          ]}
+        >
+          {title}
+        </HeaderDataCell>,
+        renderCell: ({row}) => <SimpleCell list={row.fee1}/>,
+
+      }, {
+        title: 'Add',
+        accessor: 'add',
+        renderHeaderCell: ({title}) => <HeaderDataCell
+          controlRight={[
+            <Button as="span" iconSize="s" onlyIcon={true} view="clear" iconRight={IconAdd}/>,
+          ]}
+        >
+          {title}
+        </HeaderDataCell>,
+      },
+    ]
+  }, [isTransactionsApplied, onEditKeys, percents, memoFee0, memoFee1]);
+
+  useEffect(() => {
+    console.log('effect with connect!');
+    connect();
+
+    return () => {
+      disconnect();
+    };
+  }, [connect, disconnect]);
+
+
+  if (!slots.length) return <span
     className="w-full text-center text-xl font-bold">Loading...</span>
 
-  return (<Table className="w-full2" columns={columns} rows={[...rowsFromSocket].reverse()}/>)
+  return <div className="w-full overflow-x-auto">
+    <Table className="overflow-scroll" columns={columns} rows={[...rowsFromSocket].reverse()} style={{maxHeight: undefined}}
+           resizable={undefined}/>
+  </div>
 }
 
 type ModalFeeProps = {
-  isVisible:boolean;
+  isVisible: boolean;
   onClose: () => void;
+  editedFeeIdx: number;
 }
 
-const modalFeeItems = [50,60,70,80,90].map(elt => ({label: `${elt}`}))
-const ModalFee = ({isVisible, onClose}:ModalFeeProps) => {
+const modalFeeItems = [50, 60, 70, 80, 90].map(elt => ({label: `${elt}`}))
+const ModalFee = ({
+                    isVisible,
+                    onClose,
+                    editedFeeIdx,
+                  }: ModalFeeProps) => {
+  const fees = useWebSocketStore(state => state.percents)
+  const updatePercents = useWebSocketStore(state => state.updatePercents)
+  const updateSubscription = useWebSocketStore(state => state.updateSubscription)
+  const {
+          disconnect,
+          connect,
+        } = useWebSocketStore(({
+                                 disconnect,
+                                 connect,
+                               }) => (({
+    disconnect,
+    connect,
+  })))
   const [feeValue, setFeeValue] = useState('');
-  return       <Modal
+  useLayoutEffect(() => {
+    if (isVisible) {
+      const value = percentFromStore(fees[editedFeeIdx] || 0);
+      setFeeValue(`${value}`)
+    }
+  }, [editedFeeIdx, isVisible])
+  const onClickButton = () => {
+    const newPercents = fees.map((elt, idx) => {
+      if (idx === editedFeeIdx) return +(+feeValue * 100).toFixed(2);
+      return elt;
+    })
+    updatePercents(newPercents)
+    // updateSubscription();
+    disconnect();
+    connect();
+    onClose();
+  }
+  return <Modal
     isOpen={isVisible}
     hasOverlay
     onClickOutside={onClose}
     onEsc={onClose}
     className="flex flex-col gap-4 p-6"
   >
-      <Text as="h1" size="2xl" view="primary">
-        Fee percentile
-      </Text>
+    <Text as="h1" size="2xl" view="primary">
+      Fee percentile
+    </Text>
     <div className="flex flex-col gap-2">
       <TextField
-        onChange={value => setFeeValue(value||'')}
+        onChange={value => setFeeValue(value || '')}
         value={feeValue}
         type="number"
         placeholder="1-100"
         incrementButtons={false}
       />
-    <Chips interactive items={modalFeeItems} onItemClick={item => setFeeValue(item.label)} size="xs"/>
+      <Chips interactive items={modalFeeItems} onItemClick={item => setFeeValue(item.label)} size="xs"/>
     </div>
-      <Button
-        view="primary"
-        label="Done"
-        width="full"
-        onClick={onClose}
-      />
+    <Button
+      view="primary"
+      label="Done"
+      width="full"
+      onClick={onClickButton}
+    />
   </Modal>
 }
-const ModalFilter = ({isVisible, onClose}:ModalFeeProps) => {
-  const [pubValue, setPubValue] = useState('');
-  const [privateValue, setPrivateValue] = useState('');
-  return       <Modal
+
+type ModalFilterProps = {
+  isVisible: boolean;
+  onClose: () => void;
+}
+
+const ModalFilter = ({
+                       isVisible,
+                       onClose,
+                     }: ModalFilterProps) => {
+  const [rwValue, setRwValue] = useState('');
+  const [roValue, setRoValue] = useState('');
+  const savedReadonlyKeys = useWebSocketStore(state => state.readonlyKeys)
+  const savedReadwriteKeys = useWebSocketStore(state => state.readwriteKeys)
+  const updateRo = useWebSocketStore(state => state.updateReadonlyKeys)
+  const updateRw = useWebSocketStore(state => state.updateReadwriteKeys)
+  const updateSubscription = useWebSocketStore(state => state.updateSubscription)
+  const {
+          disconnect,
+          connect,
+        } = useWebSocketStore(({
+                                 disconnect,
+                                 connect,
+                               }) => (({
+    disconnect,
+    connect,
+  })))
+
+  const onClickButton = () => {
+    // Может быть проблема, что пишет массив с одним элементом "" (пустая строка). Уточнить потом.
+    updateRo(roValue.split("\n"));
+    updateRw(rwValue.split("\n"));
+    // updateSubscription();
+    disconnect();
+    connect();
+    onClose();
+  }
+  useLayoutEffect(() => {
+    if (isVisible) {
+      setRoValue(savedReadonlyKeys.join("\n"))
+      setRwValue(savedReadwriteKeys.join("\n"))
+    }
+  }, [isVisible])
+
+  return <Modal
     isOpen={isVisible}
     hasOverlay
     onClickOutside={onClose}
     onEsc={onClose}
     className="flex flex-col gap-4 p-6 min-w-[50%]"
   >
-      <Text as="h1" size="2xl" view="primary">
-        Filter transactions
-      </Text>
+    <Text as="h1" size="2xl" view="primary">
+      Filter transactions
+    </Text>
     <div className="flex flex-col gap-2">
       <TextField
         className="min-w-80 custom-nowrap-textarea"
         label="Read-write pubkeys"
         labelPosition="top"
         type="textarea"
-        onChange={value => setPubValue(value||'')}
-        value={pubValue}
+        onChange={value => setRwValue(value || '')}
+        value={rwValue}
         placeholder="Pubkeys"
         minRows={3 as unknown as undefined}
         maxRows={10 as unknown as undefined}
@@ -436,29 +431,32 @@ const ModalFilter = ({isVisible, onClose}:ModalFeeProps) => {
         label="Read-only pubkeys"
         labelPosition="top"
         type="textarea"
-        onChange={value => setPrivateValue(value||'')}
-        value={privateValue}
+        onChange={value => setRoValue(value || '')}
+        value={roValue}
         placeholder="Pubkeys"
         minRows={3 as unknown as undefined}
         maxRows={10 as unknown as undefined}
       />
     </div>
-      <Button
-        view="primary"
-        label="Done"
-        width="full"
-        onClick={onClose}
-      />
+    <Button
+      view="primary"
+      label="Done"
+      width="full"
+      onClick={onClickButton}
+    />
   </Modal>
 }
 
 export const Home = (): FunctionComponent => {
-  const [feeModalShown, feeModalControls] = useFlag(false)
-  const [filterModalShown, filterModalControls] = useFlag(true)
+  const [filterModalShown, filterModalControls] = useFlag(false)
+  const [editedFeeIdx, setEditedFeeIdx] = useState(-1)
+
+  const navigate = useNavigate()
 
   return (<>
+    <button className="absolute top-2 left-2 rounded bg-amber-300" onClick={() => navigate({to: '/homeOld'})}>click to old version</button>
     <div className="px-20 py-5 bg-white w-full flex-col justify-start items-start gap-8 inline-flex">
-      <div className="self-stretch justify-between items-center inline-flex">
+    <div className="self-stretch justify-between items-center inline-flex">
         <div className="justify-start items-center gap-2 flex">
           <IconFeed className="w-5 h-5 relative"></IconFeed>
           <div className="text-center text-[#002033] text-2xl font-semibold font-['Inter'] leading-[31.20px]">Solfees
@@ -746,9 +744,9 @@ export const Home = (): FunctionComponent => {
           <div className="w-96 h-[206px] left-[29px] top-[44px] absolute"></div>
         </div>
       </div>
-      <CustomTable/>
-      <ModalFee isVisible={feeModalShown} onClose={() => {feeModalControls.off(); filterModalControls.on()}} />
-      <ModalFilter isVisible={filterModalShown} onClose={filterModalControls.off} />
+      <CustomTable onEditFee={setEditedFeeIdx} onEditKeys={filterModalControls.on}/>
+      <ModalFee editedFeeIdx={editedFeeIdx} isVisible={editedFeeIdx >= 0} onClose={() => setEditedFeeIdx(-1)}/>
+      <ModalFilter isVisible={filterModalShown} onClose={filterModalControls.off}/>
     </div>
   </>);
 };

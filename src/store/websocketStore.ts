@@ -2,62 +2,99 @@ import {create} from "zustand";
 
 
 export interface SlotContent {
-  commitment:                string;
-  feeAverage:                number;
-  feeLevels:                 number[];
-  hash:                      string;
-  height:                    number;
-  leader:                    string;
-  slot:                      number;
-  time:                      number;
-  totalFee:                  number;
-  totalTransactions:         number;
+  commitment: CommitmentStatus;
+  feeAverage: number;
+  feeLevels: number[];
+  hash: string;
+  height: number;
+  leader: string;
+  slot: number;
+  time: number;
+  totalFee: number;
+  totalTransactions: number;
   totalTransactionsFiltered: number;
-  totalTransactionsVote:     number;
-  totalUnitsConsumed:        number;
-}
-export interface StatusUpdate {
-  commitment: string;
-  slot:       number;
+  totalTransactionsVote: number;
+  totalUnitsConsumed: number;
 }
 
+export interface StatusUpdate {
+  commitment: CommitmentStatus;
+  slot: number;
+}
+
+export type CommitmentStatus = 'processed' | 'confirmed' | 'finalized';
 
 interface WebSocketState {
-  isConnected: boolean;
   socket: WebSocket | null;
+  isConnected: boolean;
+  slots: SlotContent[]
+  readonlyKeys: string[],
+  readwriteKeys: string[],
+  percents: number[],
   connect: () => void;
   disconnect: () => void;
-  slots: SlotContent[]
-}
-interface ServerAnswer {
-  result: Array<{slot: SlotContent}>
+  updateSubscription: () => void;
+  updatePercents: (arg: number[]) => void;
+  updateReadonlyKeys: (arg: string[]) => void;
+  updateReadwriteKeys: (arg: string[]) => void;
 }
 
+interface ServerAnswer {
+  result: Array<{
+    slot: SlotContent
+  }>
+}
 
 
 export const useWebSocketStore = create<WebSocketState>((set) => ({
   socket: null,
-  slots: [],
   isConnected: false,
+  slots: [],
+  readonlyKeys: [],
+  readwriteKeys: [],
+  percents: [5000, 9500],
+  updatePercents: (percents) => {
+    set({percents})
+  },
+  updateReadonlyKeys: (readonlyKeys) => {
+    if(JSON.stringify(readonlyKeys) === JSON.stringify([""])) return;
+    set({readonlyKeys})
+  },
+  updateReadwriteKeys: (readwriteKeys) => {
+    // сюда еще проверку валидности ключа надо положить, пока обработал корнеркейсы
+    if(JSON.stringify(readwriteKeys) === JSON.stringify([""])) return;
+    set({readwriteKeys})
+  },
+  updateSubscription: () => {
+    set((state: WebSocketState) => {
+      if(state.socket) {
+        const data = {
+          "id": 0,
+          "method": "SlotsSubscribe",
+          "params": {
+            "readWrite": state.readwriteKeys,
+            "readOnly": state.readonlyKeys,
+            "levels": state.percents,
+          },
+        }
+        state.socket.send(JSON.stringify(data))
+      }
+      return state;
+    })
+  },
   connect: () => {
     set((state: WebSocketState) => {
-      const queue:MessageEvent[] = [];
+      const queue: MessageEvent[] = [];
+      let lastProcessedTime = Date.now();
 
-      // - показываем спин загрузки
-      // - подписываемся на слоты и новые складываем в буфер
-      // - как только пришёл ответ, что подписка сделана, то делаем хттп запрос на все слоты
-      // - убираем спин и показываем ответ что получили
-      // - докидываем слоты из буфера в таблицу
-      // - новые слоты без буфера сразу отправляем в таблицу
-      // - держим максимум 150 последних слотов
       if (state.socket) return state
 
       const url = 'wss://api.solfees.io/api/solfees/ws'
       const socket = new WebSocket(url);
 
       socket.onopen = () => {
-        socket.send(`{"id":0,"method":"SlotsSubscribe","params":{"readWrite":[],"readOnly":[],"levels":[5000,9500]}}`)
         set({socket});
+        state.updateSubscription();
       };
       socket.onclose = () => {
         set({
@@ -72,20 +109,26 @@ export const useWebSocketStore = create<WebSocketState>((set) => ({
         const data = JSON.parse(event.data) as any
         if (data.result.slot) {
           const update = data.result.slot as SlotContent
-          set((state:WebSocketState) => {
+          set((state: WebSocketState) => {
             const slots = [...state.slots.slice(-149), update]
-            return {...state, slots};
+            return {
+              ...state,
+              slots,
+            };
           })
           return;
         }
         if (data.result.status) {
           const update = data.result.status as StatusUpdate
-          set((state:WebSocketState) => {
+          set((state: WebSocketState) => {
             const slots = state.slots.map(elt => {
-              if(elt.slot === update.slot) return {...elt, ...update}
+              if (elt.slot === update.slot) return {...elt, ...update}
               return elt;
             })
-            return {...state, slots};
+            return {
+              ...state,
+              slots,
+            };
           })
           return;
         }
@@ -101,14 +144,32 @@ export const useWebSocketStore = create<WebSocketState>((set) => ({
         body: JSON.stringify({
           method: 'getRecentPrioritizationFees',
           jsonrpc: '2.0',
-          params: [{"readWrite":[],"readOnly":[],"levels":[5000,9000]}],
-          id: '1'
-        })
+          params: [
+            {
+              "readWrite": state.readwriteKeys,
+              "readOnly": state.readonlyKeys,
+              "levels": state.percents,
+            },
+          ],
+          id: '1',
+        }),
       })
       .then(response => response.json() as Promise<ServerAnswer>)
       .then(serverData => {
-        set({isConnected: true, slots: serverData.result.map(elt => elt.slot)})
-        // socket.onmessage = handleMessage
+        set({
+          isConnected: true,
+          slots: serverData.result.map(elt => elt.slot),
+        })
+        socket.onmessage = function (e: MessageEvent) {
+          queue.push(e)
+          // Костыль для перфоманса, можно ставить 1 сек и обновления будет меньше
+          if(Date.now() - lastProcessedTime > 125) {
+            queue.length > 1 && console.log('queued from WS:', queue.length);
+            queue.forEach(handleMessage)
+            queue.length = 0;
+            lastProcessedTime = Date.now();
+          }
+        }
         queue.forEach(handleMessage)
         queue.length = 0;
       })

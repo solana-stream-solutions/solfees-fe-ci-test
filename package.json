@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@consta/icons": "^1.1.0",
+    "@consta/table": "^0.0.1",
     "@consta/uikit": "^5.9.2",
     "@hookform/resolvers": "^3.9.0",
     "@nivo/bar": "^0.87.0",

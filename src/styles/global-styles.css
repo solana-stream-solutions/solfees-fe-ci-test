@@ -2,3 +2,6 @@
     white-space: nowrap;
     text-wrap: none;
 }
+.Modal_hasOverlay{
+    z-index: 2;
+}
