@@ -56,7 +56,7 @@ export const useWebSocketStore = create<WebSocketState>((set) => ({
       const socket = new WebSocket(url);
 
       socket.onopen = () => {
-        socket.send(`{"id":0,"method":"SlotsSubscribe","params":{"readWrite":[],"readOnly":["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"],"levels":[5000,9500]}}`)
+        socket.send(`{"id":0,"method":"SlotsSubscribe","params":{"readWrite":[],"readOnly":[],"levels":[5000,9500]}}`)
         set({socket});
       };
       socket.onclose = () => {
@@ -101,14 +101,14 @@ export const useWebSocketStore = create<WebSocketState>((set) => ({
         body: JSON.stringify({
           method: 'getRecentPrioritizationFees',
           jsonrpc: '2.0',
-          params: [],
+          params: [{"readWrite":[],"readOnly":[],"levels":[5000,9000]}],
           id: '1'
         })
       })
       .then(response => response.json() as Promise<ServerAnswer>)
       .then(serverData => {
         set({isConnected: true, slots: serverData.result.map(elt => elt.slot)})
-        socket.onmessage = handleMessage
+        // socket.onmessage = handleMessage
         queue.forEach(handleMessage)
         queue.length = 0;
       })

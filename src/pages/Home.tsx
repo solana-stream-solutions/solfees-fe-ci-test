@@ -15,6 +15,11 @@ import {IconRoute} from "@consta/icons/IconRoute";
 import {IconPropView} from "@consta/icons/Icon";
 import {IconCheck} from "@consta/icons/IconCheck";
 import {IconAllDone} from "@consta/icons/IconAllDone";
+import {Modal} from "@consta/uikit/Modal";
+import {useFlag} from "@consta/uikit/useFlag";
+import {TextField} from "@consta/uikit/TextField";
+import {Chips} from "@consta/uikit/Chips";
+
 
 type CommitmentStatus = 'processed' | 'confirmed' | 'finalized';
 
@@ -146,7 +151,7 @@ const Epoch = () => {
         numeric: "always", // other values: "auto"
         style: "long", // other values: "short" or "narrow"
       });
-      const secs = (432_000 - (lastSlot.slot % 432_000)) * 0.471
+      const secs = (432_000 - (lastSlot.slot % 432_000)) * 0.4
       if (secs < 90) return rtf.format(secs, 'seconds') // 1.5 минуты
       if (secs < (90 * 60)) return rtf.format((secs / 60) | 0, 'minutes') // 1.5ч
       if (secs < 1.5 * 86_400) return rtf.format((secs / 3_600) | 0, 'hours') // 1.5д
@@ -159,7 +164,7 @@ const Epoch = () => {
     const [lastSlot] = slots.slice(-1)
     if (lastSlot) {
       const secs = (432_000 - (lastSlot.slot % 432_000)) * 0.471
-      return formatDuration(secs)
+      return formatDuration(secs)+'. Based on slot duration equals 400ms.'
     }
     return '...'
   }, [slots])
@@ -207,6 +212,19 @@ function append(rawSlots: SlotContent[]): SlotContent[] {
     rawSlots.unshift(value)
   }
   return rawSlots
+}
+
+function buildTransactions(slots:SlotContent[]) {
+  const first = slots.map(elt => elt.totalTransactions - elt.totalTransactionsVote)
+  const maxFirst = `${Math.max(...first)}`.length
+  const second = slots.map(elt => elt.totalTransactions)
+  const maxSecond = `${Math.max(...second)}`.length
+  const aligned = slots.map((_, idx) => {
+    const colOne = `${first[idx]}`.padStart(maxFirst, ' ');
+    const colSecond = `${second[idx]}`.padStart(maxSecond, ' ');
+    return colOne + ' / ' + colSecond
+  })
+  return aligned
 }
 
 const CustomTable = () => {
@@ -263,12 +281,12 @@ const CustomTable = () => {
         id: `${leader}-${slots[0]?.slot || 'empty'}`,
         leader,
         slot: slots.map(elt => [elt.commitment, elt.slot.toLocaleString('en-US')]),
-        transactions: slots.map(elt => `${elt.totalTransactions - elt.totalTransactionsVote} / ${elt.totalTransactions}`),
+        transactions: buildTransactions(slots),
         computeUnits: slots.map(elt => [elt.totalUnitsConsumed.toLocaleString('en-US'), (elt.totalUnitsConsumed / 48_000_000 * 100).toFixed(2)]),
         earnedSol: slots.map(elt => elt.totalFee),
-        averageFee: slots.map(elt => elt.feeAverage), // TODO надо по другому высчитывать, имена колонок и всякое такое
-        feeP50: slots.map(elt => elt.feeLevels[0]),
-        feeP90: slots.map(elt => elt.feeLevels[1]),
+        averageFee: slots.map(elt => elt.feeAverage.toFixed(2)),
+        feeP50: slots.map(elt => elt.feeLevels[0]), // TODO надо по другому высчитывать, имена колонок и всякое такое
+        feeP90: slots.map(elt => elt.feeLevels[1]), // TODO надо по другому высчитывать, имена колонок и всякое такое
         add: [],
       }
     })
@@ -281,6 +299,7 @@ const CustomTable = () => {
       renderCell: (row) => <span><span className="font-bold">Validator Name:</span><br/>{row.leader}</span>,
     }, {
       width: 'auto' as unknown as number,
+      align: 'right',
       title: 'Slots',
       accessor: 'slot',
       renderCell: (row) => <span>{row.slot.map(([commitment, slot]) => <span
@@ -289,37 +308,43 @@ const CustomTable = () => {
     }, {
       title: 'Transactions',
       accessor: 'transactions',
+      align: 'right',
       control: () => (<Button style={{
         '--button-color': 'red',
         '--button-color-hover': 'darkred',
       } as unknown as CSSProperties} view="clear" size="s" onlyIcon iconRight={IconFunnel}/>),
-      renderCell: (row) => <span>{row.transactions.map(elt => <div>{elt}</div>)}</span>,
+      renderCell: (row) => <span>{row.transactions.map(elt => <Text font="mono" className="whitespace-pre">{elt}</Text>)}</span>,
     }, {
       title: 'Compute Units',
       width: 'auto' as unknown as number,
+      align: 'right',
       accessor: 'computeUnits',
       control: ({column}) => (<InfoButton content={column.title as string} direction={'downCenter'}/>),
       renderCell: (row) => <span className="w-full">{row.computeUnits.map(([amount, percent]) => <div
-        className="flex justify-between text-right gap-1">
-        <Text font="mono">{amount}</Text><span>({percent}%)</span></div>)}</span>,
+        className="flex justify-end text-right gap-1">
+        <Text font="mono">{amount}</Text><Text font="mono">({percent}%)</Text></div>)}</span>,
     }, {
       title: 'Earned SOL',
+      align: 'right',
       accessor: 'earnedSol',
       control: ({column}) => (<InfoButton content={column.title as string} direction={'downCenter'}/>),
-      renderCell: (row) => <span>{row.earnedSol.map(elt => <div>{elt}</div>)}</span>,
+      renderCell: (row) => <Text font="mono">{row.earnedSol.map(elt => <div>{elt}</div>)}</Text>,
     }, {
       title: 'Average Fee',
       accessor: 'averageFee',
+      align: 'right',
       control: ({column}) => (<InfoButton content={column.title as string} direction={'downCenter'}/>),
-      renderCell: (row) => <span>{row.averageFee.map(elt => <div>{elt}</div>)}</span>,
+      renderCell: (row) => <Text font="mono">{row.averageFee.map(elt => <div>{elt}</div>)}</Text>,
     }, {
       title: 'Fee p50',
       accessor: 'feeP50',
+      align: 'right',
       control: () => (<Button as="span" iconSize="s" onlyIcon={true} view="clear" iconRight={IconEdit}/>),
       renderCell: (row) => <span>{row.feeP50.map(elt => <div>{elt}</div>)}</span>,
     }, {
       title: 'Fee p90',
       accessor: 'feeP90',
+      align: 'right',
       control: () => (<Button as="span" iconSize="s" onlyIcon={true} view="clear" iconRight={IconEdit}/>),
       renderCell: (row) => <span>{row.feeP90.map(elt => <div>{elt}</div>)}</span>,
     }, {
@@ -340,11 +365,97 @@ const CustomTable = () => {
   if (!isConnected || !rowsFromSocket.length) return <span
     className="w-full text-center text-xl font-bold">Loading...</span>
 
-  return (<Table className="w-full2" columns={columns} rows={rowsFromSocket.reverse()}/>)
+  return (<Table className="w-full2" columns={columns} rows={[...rowsFromSocket].reverse()}/>)
 }
 
+type ModalFeeProps = {
+  isVisible:boolean;
+  onClose: () => void;
+}
+
+const modalFeeItems = [50,60,70,80,90].map(elt => ({label: `${elt}`}))
+const ModalFee = ({isVisible, onClose}:ModalFeeProps) => {
+  const [feeValue, setFeeValue] = useState('');
+  return       <Modal
+    isOpen={isVisible}
+    hasOverlay
+    onClickOutside={onClose}
+    onEsc={onClose}
+    className="flex flex-col gap-4 p-6"
+  >
+      <Text as="h1" size="2xl" view="primary">
+        Fee percentile
+      </Text>
+    <div className="flex flex-col gap-2">
+      <TextField
+        onChange={value => setFeeValue(value||'')}
+        value={feeValue}
+        type="number"
+        placeholder="1-100"
+        incrementButtons={false}
+      />
+    <Chips interactive items={modalFeeItems} onItemClick={item => setFeeValue(item.label)} size="xs"/>
+    </div>
+      <Button
+        view="primary"
+        label="Done"
+        width="full"
+        onClick={onClose}
+      />
+  </Modal>
+}
+const ModalFilter = ({isVisible, onClose}:ModalFeeProps) => {
+  const [pubValue, setPubValue] = useState('');
+  const [privateValue, setPrivateValue] = useState('');
+  return       <Modal
+    isOpen={isVisible}
+    hasOverlay
+    onClickOutside={onClose}
+    onEsc={onClose}
+    className="flex flex-col gap-4 p-6 min-w-[50%]"
+  >
+      <Text as="h1" size="2xl" view="primary">
+        Filter transactions
+      </Text>
+    <div className="flex flex-col gap-2">
+      <TextField
+        className="min-w-80 custom-nowrap-textarea"
+        label="Read-write pubkeys"
+        labelPosition="top"
+        type="textarea"
+        onChange={value => setPubValue(value||'')}
+        value={pubValue}
+        placeholder="Pubkeys"
+        minRows={3 as unknown as undefined}
+        maxRows={10 as unknown as undefined}
+      />
+    </div>
+    <div className="flex flex-col gap-2">
+      <TextField
+        className="min-w-80 custom-nowrap-textarea"
+        label="Read-only pubkeys"
+        labelPosition="top"
+        type="textarea"
+        onChange={value => setPrivateValue(value||'')}
+        value={privateValue}
+        placeholder="Pubkeys"
+        minRows={3 as unknown as undefined}
+        maxRows={10 as unknown as undefined}
+      />
+    </div>
+      <Button
+        view="primary"
+        label="Done"
+        width="full"
+        onClick={onClose}
+      />
+  </Modal>
+}
 
 export const Home = (): FunctionComponent => {
+  const [feeModalShown, feeModalControls] = useFlag(false)
+  const [filterModalShown, filterModalControls] = useFlag(true)
+
   return (<>
     <div className="px-20 py-5 bg-white w-full flex-col justify-start items-start gap-8 inline-flex">
       <div className="self-stretch justify-between items-center inline-flex">
@@ -636,6 +747,8 @@ export const Home = (): FunctionComponent => {
         </div>
       </div>
       <CustomTable/>
+      <ModalFee isVisible={feeModalShown} onClose={() => {feeModalControls.off(); filterModalControls.on()}} />
+      <ModalFilter isVisible={filterModalShown} onClose={filterModalControls.off} />
     </div>
   </>);
 };
