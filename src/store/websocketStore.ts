@@ -138,7 +138,7 @@ export const useWebSocketStore = create<WebSocketState>((set) => ({
 
               const slots2 = state.slots2;
               if(!slots2[groupIdx]) {
-                console.warn('no update for groupId:', groupIdx, 'slot:', update.slot, update.commitment)
+                // console.warn('no update for groupId:', groupIdx, 'slot:', update.slot, update.commitment)
                 return state;
               }
 
@@ -153,6 +153,10 @@ export const useWebSocketStore = create<WebSocketState>((set) => ({
                 slots2: {...slots2},
               };
             })
+            return;
+          }
+          if(data.result === 'subscribed') {
+            // Это сообщение, что подписка удалась и нет проблем
             return;
           }
           console.log('unrecognized2', data);

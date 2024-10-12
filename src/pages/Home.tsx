@@ -175,7 +175,7 @@ const CustomTable = ({
       }
     })
   }, [slots2])
-  rowsFromSocket2;
+
   const isTransactionsApplied = useMemo(() => {
     return !!readwriteKeys.length || !!readonlyKeys.length
   }, [readwriteKeys.length, readonlyKeys.length])
@@ -304,6 +304,59 @@ const CustomTable = ({
       disconnect();
     };
   }, [connect, disconnect]);
+
+  const isSimple = false;
+  if(isSimple) return <>
+  <div className="w-full overflow-x-auto">
+    {rowsFromSocket2.map((row) => {
+      return <div className="border flex flex-row gap-1" key={`${row.leader}-${(row.slots[0].slot/4)|0}`}>
+        <div className="bg-red-100">{row.leader}</div>
+        <div>
+          {row.slots.map((slot) => (
+            <div className="bg-green-100" key={slot.slot}>
+              {slot.commitment}-{slot.slot}
+            </div>
+          ))}
+        </div>
+        <div>
+        {row.fee0.map((elt, idx) => (
+          <div className="bg-blue-100" key={idx}>
+            {elt}
+          </div>
+        ))}
+        </div>
+        <div>
+        {row.fee1.map((elt, idx) => (
+          <div className="bg-red-100" key={idx}>
+            {elt}
+          </div>
+        ))}
+        </div>
+        <div>
+        {row.averageFee.map((elt, idx) => (
+          <div className="bg-green-100" key={idx}>
+            {elt}
+          </div>
+        ))}
+        </div>
+        <div>
+        {row.earnedSol.map((elt, idx) => (
+          <div className="bg-blue-100" key={idx}>
+            {elt}
+          </div>
+        ))}
+        </div>
+        <div>
+        {row.computeUnits.map((elt, idx) => (
+          <div className="bg-red-100" key={idx}>
+            {elt.amount}-{elt.percent}
+          </div>
+        ))}
+        </div>
+      </div>
+    })}
+  </div>
+  </>
 
 
   if (!slots.length) return <span
