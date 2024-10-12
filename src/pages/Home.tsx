@@ -22,6 +22,7 @@ import {Epoch} from "../components/ui/Epoch.tsx";
 import {HeaderDataCell} from "@consta/table/HeaderDataCell";
 import {SimpleCell} from "../components/ui/SimpleCell.tsx";
 import {useNavigate} from "@tanstack/react-router";
+import {Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis} from 'recharts';
 
 
 const IconFeed = ({className = ''}): ReactNode => {
@@ -81,6 +82,7 @@ const CustomTable = ({
                        onEditKeys,
                      }: TableProps) => {
   const slots = useWebSocketStore(state => state.slots);
+  const slots2 = useWebSocketStore(state => state.slots2);
   const disconnect = useWebSocketStore(state => state.disconnect)
   const connect = useWebSocketStore(state => state.connect)
   const percents = useWebSocketStore(state => state.percents)
@@ -148,6 +150,32 @@ const CustomTable = ({
       }
     })
   }, [slots])
+  const rowsFromSocket2 = useMemo(() => {
+    const unsorted = slots2 as Record<string, SlotContent[]>
+    return Object.entries(unsorted).sort((a,b) => Number(a[0])-Number(b[0])).map(([id, slotsRaw]) => {
+      const slots = slotsRaw.sort((a,b) => b.slot - a.slot);
+      const leader = slots[0]?.leader || 'UNKNOWN'
+      return {
+        id,
+        leader,
+        slots: slots.map(elt => ({
+          commitment: elt.commitment,
+          slot: elt.slot,
+        })),
+        transactions: buildTransactions(slots),
+        computeUnits: slots.map(elt => ({
+          amount: elt.totalUnitsConsumed.toLocaleString('en-US'),
+          percent: (elt.totalUnitsConsumed / 48_000_000 * 100).toFixed(2),
+        })),
+        earnedSol: slots.map(elt => elt.totalFee),
+        averageFee: slots.map(elt => elt.feeAverage.toFixed(2)),
+        fee0: slots.map(elt => elt.feeLevels[0] || 0),
+        fee1: slots.map(elt => elt.feeLevels[1] || 0),
+        add: [],
+      }
+    })
+  }, [slots2])
+  rowsFromSocket2;
   const isTransactionsApplied = useMemo(() => {
     return !!readwriteKeys.length || !!readonlyKeys.length
   }, [readwriteKeys.length, readonlyKeys.length])
@@ -282,7 +310,8 @@ const CustomTable = ({
     className="w-full text-center text-xl font-bold">Loading...</span>
 
   return <div className="w-full overflow-x-auto">
-    <Table className="overflow-scroll" columns={columns} rows={[...rowsFromSocket].reverse()} style={{maxHeight: undefined}}
+    <Table className="overflow-scroll" columns={columns} rows={[...rowsFromSocket2].reverse()}
+           style={{maxHeight: undefined}}
            resizable={undefined}/>
   </div>
 }
@@ -447,16 +476,18 @@ const ModalFilter = ({
   </Modal>
 }
 
-export const Home = (): FunctionComponent => {
+export const Home= (): FunctionComponent => {
   const [filterModalShown, filterModalControls] = useFlag(false)
   const [editedFeeIdx, setEditedFeeIdx] = useState(-1)
 
   const navigate = useNavigate()
 
   return (<>
-    <button className="absolute top-2 left-2 rounded bg-amber-300" onClick={() => navigate({to: '/homeOld'})}>click to old version</button>
+    <button className="absolute top-2 left-2 rounded bg-amber-300" onClick={() => navigate({to: '/homeOld'})}>click to
+      old version
+    </button>
     <div className="px-20 py-5 bg-white w-full flex-col justify-start items-start gap-8 inline-flex">
-    <div className="self-stretch justify-between items-center inline-flex">
+      <div className="self-stretch justify-between items-center inline-flex">
         <div className="justify-start items-center gap-2 flex">
           <IconFeed className="w-5 h-5 relative"></IconFeed>
           <div className="text-center text-[#002033] text-2xl font-semibold font-['Inter'] leading-[31.20px]">Solfees
@@ -749,4 +780,64 @@ export const Home = (): FunctionComponent => {
       <ModalFilter isVisible={filterModalShown} onClose={filterModalControls.off}/>
     </div>
   </>);
-};
+}
+
+export const ExampleArea = () => {
+  const data = [{
+    name: 'Page A',
+    rangeOne: 4000,
+    amt: 2400
+  }, {
+    name: 'Page B',
+    rangeOne: 3000,
+    amt: 2210
+  }, {
+    name: 'Page C',
+    rangeOne: 2000,
+    rangeTwo: 9800,
+    amt: 2290
+  }, {
+    name: 'Page D',
+    rangeTwo: 3908,
+    amt: 2000
+  }, {
+    name: 'Page E',
+    rangeTwo: 4800,
+    rangeThree: 3190,
+    amt: 2181
+  }, {
+    name: 'Page F',
+    rangeThree: 2390,
+    amt: 2500
+  }, {
+    name: 'Page G',
+    rangeThree: 3490,
+    amt: 2100
+  }];
+  return <div style={{
+    width: '100%'
+  }}>
+    <ResponsiveContainer width="100%" height={200}>
+      <AreaChart width={500} height={200} data={data} margin={{
+        top: 10,
+        right: 30,
+        left: 0,
+        bottom: 0
+      }}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="name" />
+        <YAxis />
+        <Tooltip />
+        <Area type="monotone" dataKey="rangeOne" stroke="#8884d8" fill="blue" />
+        <Area type="monotone" dataKey="rangeTwo" stroke="#8884d8" fill="red" />
+        <Area type="monotone" dataKey="rangeThree" stroke="#8884d8" fill="green" />
+      </AreaChart>
+    </ResponsiveContainer>
+  </div>;
+}
+
+// slot / 4, убираем дробную часть -- это наш групповой индекс
+// запоминаем лидера, потом остальные можно сравнить и выкуинуть ошибку кесли лидеры не совпадают
+// можно закинуть в массив, пофиг на дырки, потом по нему итерироваться.
+//
+//   SLOT -- копирование иконка работает, ссылка не работает.

@@ -56,7 +56,8 @@ const SlotWithCopy = ({value}: CopyButtonProps): ReactNode => {
     copyToClipboard(`${value}`);
     setIsTouched(true);
     timeoutId.current = +setTimeout(() => setIsTouched(false), 2000)
-    e.preventDefault();
+    const target = e.nativeEvent.target as HTMLElement;
+    if(target.nodeName !== 'A') e.preventDefault();
   }
   return <a href={`https://explorer.solana.com/block/${value}`} target="_blank" className="hover:underline items-center flex-nowrap flex gap-1"
             onClick={onCopyHandler}>
