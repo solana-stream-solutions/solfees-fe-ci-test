@@ -24,6 +24,7 @@ const statuses: CommitmentStatus[] = ['processed', 'confirmed', 'finalized']
 const colors: IconPropView[] = ['ghost', 'primary', 'success']
 const icons = [IconRoute, IconCheck, IconAllDone]
 export const AnimateIconBaseIcons = ({value}: ComProps) => {
+  return null;
   const idx = statuses.findIndex(elt => elt === value)
   return (<AnimateIconBase
     className="shrink-0"

@@ -152,8 +152,7 @@ const CustomTable = ({
   }, [slots])
   const rowsFromSocket2 = useMemo(() => {
     const unsorted = slots2 as Record<string, SlotContent[]>
-    return Object.entries(unsorted).sort((a,b) => Number(a[0])-Number(b[0])).map(([id, slotsRaw]) => {
-      const slots = slotsRaw.sort((a,b) => b.slot - a.slot);
+    return Object.entries(unsorted).sort((a,b) => Number(a[0])-Number(b[0])).map(([id, slots]) => {
       const leader = slots[0]?.leader || 'UNKNOWN'
       return {
         id,
@@ -364,7 +363,8 @@ const CustomTable = ({
 
   return <div className="w-full overflow-x-auto">
     <Table className="overflow-scroll" columns={columns} rows={[...rowsFromSocket2].reverse()}
-           style={{maxHeight: undefined}}
+           style={{maxHeight: 400}}
+           virtualScroll={true}
            resizable={undefined}/>
   </div>
 }
@@ -889,8 +889,3 @@ export const ExampleArea = () => {
   </div>;
 }
 
-// slot / 4, убираем дробную часть -- это наш групповой индекс
-// запоминаем лидера, потом остальные можно сравнить и выкуинуть ошибку кесли лидеры не совпадают
-// можно закинуть в массив, пофиг на дырки, потом по нему итерироваться.
-//
-//   SLOT -- копирование иконка работает, ссылка не работает.
