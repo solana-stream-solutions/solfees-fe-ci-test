@@ -116,13 +116,17 @@ export const useWebSocketStore = create<WebSocketState>((set) => ({
               const groupIdx = (update.slot/4)|0;
 
               const slots2 = state.slots2;
-              slots2[groupIdx]  = slots2[groupIdx] || [];
-              slots2[groupIdx].push(update);
-              const keys = Object.keys(slots2);
-              if(keys.length > 38) {
-                const target = Math.min(...keys.map(Number))
-                delete slots2[target]
+              if(slots2[groupIdx]) {
+                slots2[groupIdx] = [...slots2[groupIdx], update].sort((a,b) => b.slot - a.slot);
+              } else {
+                slots2[groupIdx] = [update]
+                const keys = Object.keys(slots2);
+                if(keys.length > 38) {
+                  const target = Math.min(...keys.map(Number))
+                  delete slots2[target]
+                }
               }
+
 
               return {
                 ...state,
@@ -138,7 +142,7 @@ export const useWebSocketStore = create<WebSocketState>((set) => ({
 
               const slots2 = state.slots2;
               if(!slots2[groupIdx]) {
-                console.warn('no update for groupId:', groupIdx, 'slot:', update.slot, update.commitment)
+                // console.warn('no update for groupId:', groupIdx, 'slot:', update.slot, update.commitment)
                 return state;
               }
 
@@ -153,6 +157,10 @@ export const useWebSocketStore = create<WebSocketState>((set) => ({
                 slots2: {...slots2},
               };
             })
+            return;
+          }
+          if(data.result === 'subscribed') {
+            // Это сообщение, что подписка удалась и нет проблем
             return;
           }
           console.log('unrecognized2', data);
@@ -227,7 +235,7 @@ export const useWebSocketStore = create<WebSocketState>((set) => ({
         socket.onmessage = function (e: MessageEvent) {
           queue.push(e)
           // Костыль для перфоманса, можно ставить 1 сек и обновления будет меньше
-          if(Date.now() - lastProcessedTime > 125) {
+          if(Date.now() - lastProcessedTime > 1) {
             queue.length > 100 && console.log('queued from WS:', queue.length);
             // TODO перевернуть список, проверить что порядок слотов на месте.
             queue.forEach(handleMessage)

@@ -4,7 +4,7 @@ import {IconRoute} from "@consta/icons/IconRoute";
 import {IconCheck} from "@consta/icons/IconCheck";
 import {IconAllDone} from "@consta/icons/IconAllDone";
 import {AnimateIconBase} from "@consta/icons/AnimateIconBase";
-import {MouseEventHandler, ReactNode, useRef, useState} from "react";
+import {MouseEventHandler, ReactNode, useEffect, useRef, useState} from "react";
 import {IconCopy} from "@consta/icons/IconCopy";
 
 
@@ -71,7 +71,7 @@ const SlotWithCopy = ({value}: CopyButtonProps): ReactNode => {
 export const Slots = ({items}: Props) => {
   return <div className="px-3">
     {items.map((elt) => <span
-      key={elt.slot} className="flex flex-nowrap justify-between gap-1 items-center">
+      key={elt.slot} className="flex flex-nowrap justify-between gap-1 items-center relative">
         <AnimateIconBaseIcons value={elt.commitment}/>
         <SlotWithCopy value={elt.slot}/>
       </span>)}
