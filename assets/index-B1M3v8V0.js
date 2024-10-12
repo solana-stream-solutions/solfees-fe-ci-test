@@ -12114,6 +12114,7 @@ const useWebSocketStore = create((set2) => ({
   socket: null,
   isConnected: false,
   slots: [],
+  slots2: {},
   readonlyKeys: [],
   readwriteKeys: [],
   percents: [5e3, 9500],
@@ -12166,33 +12167,52 @@ const useWebSocketStore = create((set2) => ({
         console.error("WebSocket error:", error);
       };
       const handleMessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.result.slot) {
-          const update = data.result.slot;
-          set2((state2) => {
-            const slots = [...state2.slots.slice(-149), update];
-            return {
-              ...state2,
-              slots
-            };
-          });
-          return;
-        }
-        if (data.result.status) {
-          const update = data.result.status;
-          set2((state2) => {
-            const slots = state2.slots.map((elt) => {
-              if (elt.slot === update.slot) return { ...elt, ...update };
-              return elt;
+        function handle2(event2) {
+          const data2 = JSON.parse(event2.data);
+          if (data2.result.slot) {
+            const update = data2.result.slot;
+            set2((state2) => {
+              const groupIdx = update.slot / 4 | 0;
+              const slots2 = state2.slots2;
+              slots2[groupIdx] = slots2[groupIdx] || [];
+              slots2[groupIdx].push(update);
+              const keys = Object.keys(slots2);
+              if (keys.length > 38) {
+                const target = Math.min(...keys.map(Number));
+                delete slots2[target];
+              }
+              return {
+                ...state2,
+                slots2: { ...slots2 }
+              };
             });
-            return {
-              ...state2,
-              slots
-            };
-          });
-          return;
+            return;
+          }
+          if (data2.result.status) {
+            const update = data2.result.status;
+            set2((state2) => {
+              const groupIdx = update.slot / 4 | 0;
+              const slots2 = state2.slots2;
+              if (!slots2[groupIdx]) {
+                console.warn("no update for groupId:", groupIdx, "slot:", update.slot, update.commitment);
+                return state2;
+              }
+              const newSlots = slots2[groupIdx].map((elt) => {
+                if (elt.slot === update.slot) return { ...elt, ...update };
+                return elt;
+              });
+              slots2[groupIdx] = newSlots;
+              return {
+                ...state2,
+                slots2: { ...slots2 }
+              };
+            });
+            return;
+          }
+          console.log("unrecognized2", data2);
         }
-        console.log("unrecognized", data);
+        handle2(event);
+        return;
       };
       socket.onmessage = (event) => {
         queue.push(event);
@@ -12212,14 +12232,21 @@ const useWebSocketStore = create((set2) => ({
           id: "1"
         })
       }).then((response) => response.json()).then((serverData) => {
+        const slots2 = serverData.result.reduce((acc, elt) => {
+          const groupIdx = elt.slot.slot / 4 | 0;
+          acc[groupIdx] = acc[groupIdx] || [];
+          acc[groupIdx].push(elt.slot);
+          return acc;
+        }, {});
         set2({
           isConnected: true,
-          slots: serverData.result.map((elt) => elt.slot)
+          slots: serverData.result.map((elt) => elt.slot),
+          slots2
         });
         socket.onmessage = function(e2) {
           queue.push(e2);
           if (Date.now() - lastProcessedTime > 125) {
-            queue.length > 1 && console.log("queued from WS:", queue.length);
+            queue.length > 100 && console.log("queued from WS:", queue.length);
             queue.forEach(handleMessage);
             queue.length = 0;
             lastProcessedTime = Date.now();
@@ -14868,7 +14895,8 @@ const SlotWithCopy = ({ value }) => {
     copyToClipboard(`${value}`);
     setIsTouched(true);
     timeoutId.current = +setTimeout(() => setIsTouched(false), 2e3);
-    e2.preventDefault();
+    const target = e2.nativeEvent.target;
+    if (target.nodeName !== "A") e2.preventDefault();
   };
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "a",
@@ -16183,6 +16211,7 @@ const CustomTable = ({
   onEditKeys
 }) => {
   const slots = useWebSocketStore((state) => state.slots);
+  const slots2 = useWebSocketStore((state) => state.slots2);
   const disconnect = useWebSocketStore((state) => state.disconnect);
   const connect = useWebSocketStore((state) => state.connect);
   const percents = useWebSocketStore((state) => state.percents);
@@ -16190,7 +16219,7 @@ const CustomTable = ({
   const readwriteKeys = useWebSocketStore((state) => state.readwriteKeys);
   const memoFee0 = reactExports.useCallback(() => onEditFee(0), [onEditFee]);
   const memoFee1 = reactExports.useCallback(() => onEditFee(1), [onEditFee]);
-  const rowsFromSocket = reactExports.useMemo(() => {
+  reactExports.useMemo(() => {
     var _a2, _b2, _c2;
     const groupByLeader = {};
     let slice2 = [];
@@ -16214,31 +16243,57 @@ const CustomTable = ({
     return Object.entries(groupByLeader).map(([
       _,
       {
-        slots: slots2,
+        slots: slots3,
         leader
       }
     ]) => {
       var _a3;
       return {
-        id: `${leader}-${((_a3 = slots2[0]) == null ? void 0 : _a3.slot) || "empty"}`,
+        id: `${leader}-${((_a3 = slots3[0]) == null ? void 0 : _a3.slot) || "empty"}`,
         leader,
-        slots: slots2.map((elt) => ({
+        slots: slots3.map((elt) => ({
           commitment: elt.commitment,
           slot: elt.slot
         })),
-        transactions: buildTransactions(slots2),
-        computeUnits: slots2.map((elt) => ({
+        transactions: buildTransactions(slots3),
+        computeUnits: slots3.map((elt) => ({
           amount: elt.totalUnitsConsumed.toLocaleString("en-US"),
           percent: (elt.totalUnitsConsumed / 48e6 * 100).toFixed(2)
         })),
-        earnedSol: slots2.map((elt) => elt.totalFee),
-        averageFee: slots2.map((elt) => elt.feeAverage.toFixed(2)),
-        fee0: slots2.map((elt) => elt.feeLevels[0] || 0),
-        fee1: slots2.map((elt) => elt.feeLevels[1] || 0),
+        earnedSol: slots3.map((elt) => elt.totalFee),
+        averageFee: slots3.map((elt) => elt.feeAverage.toFixed(2)),
+        fee0: slots3.map((elt) => elt.feeLevels[0] || 0),
+        fee1: slots3.map((elt) => elt.feeLevels[1] || 0),
         add: []
       };
     });
   }, [slots]);
+  const rowsFromSocket2 = reactExports.useMemo(() => {
+    const unsorted = slots2;
+    return Object.entries(unsorted).sort((a, b) => Number(a[0]) - Number(b[0])).map(([id2, slotsRaw]) => {
+      var _a2;
+      const slots3 = slotsRaw.sort((a, b) => b.slot - a.slot);
+      const leader = ((_a2 = slots3[0]) == null ? void 0 : _a2.leader) || "UNKNOWN";
+      return {
+        id: id2,
+        leader,
+        slots: slots3.map((elt) => ({
+          commitment: elt.commitment,
+          slot: elt.slot
+        })),
+        transactions: buildTransactions(slots3),
+        computeUnits: slots3.map((elt) => ({
+          amount: elt.totalUnitsConsumed.toLocaleString("en-US"),
+          percent: (elt.totalUnitsConsumed / 48e6 * 100).toFixed(2)
+        })),
+        earnedSol: slots3.map((elt) => elt.totalFee),
+        averageFee: slots3.map((elt) => elt.feeAverage.toFixed(2)),
+        fee0: slots3.map((elt) => elt.feeLevels[0] || 0),
+        fee1: slots3.map((elt) => elt.feeLevels[1] || 0),
+        add: []
+      };
+    });
+  }, [slots2]);
   const isTransactionsApplied = reactExports.useMemo(() => {
     return !!readwriteKeys.length || !!readonlyKeys.length;
   }, [readwriteKeys.length, readonlyKeys.length]);
@@ -16410,7 +16465,7 @@ const CustomTable = ({
     {
       className: "overflow-scroll",
       columns,
-      rows: [...rowsFromSocket].reverse(),
+      rows: [...rowsFromSocket2].reverse(),
       style: { maxHeight: void 0 },
       resizable: void 0
     }
@@ -20736,4 +20791,4 @@ if (!rootElement.innerHTML) {
     /* @__PURE__ */ jsxRuntimeExports.jsx(React.Suspense, { fallback: "loading", children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, { router }) })
   );
 }
-//# sourceMappingURL=index-CSLWkozQ.js.map
+//# sourceMappingURL=index-B1M3v8V0.js.map
