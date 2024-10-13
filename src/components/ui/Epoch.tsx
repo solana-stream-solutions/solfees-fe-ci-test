@@ -20,51 +20,45 @@ const TextWithTooltip = withTooltip({content: 'Тултип сверху'})(Text
 export const Epoch = () => {
 
   const {
-          slots,
+          slots2,
         } = useWebSocketStore();
 
+  const lastSlot = useMemo(() => {
+    const idx = Math.max(...Object.keys(slots2).map(Number));
+    return slots2[idx]?.[0]?.slot || 0;
+  }, [slots2])
+
   const number = useMemo(() => {
-    // Массив сортирован, поэтому берём последнее число
-    const [lastSlot] = slots.slice(-1)
-    if (lastSlot) {
-      return (lastSlot.slot / 432_000) | 0
-    }
-    return 0
-  }, [slots]);
+    return (lastSlot / 432_000) | 0
+  }, [lastSlot]);
   const percent = useMemo(() => {
-    // Массив сортирован, поэтому берём последнее число
-    const [lastSlot] = slots.slice(-1)
-    if (lastSlot) {
-      return ((lastSlot.slot - (number * 432_000)) / 432_000 * 100).toFixed(3) + '%'
+    if(lastSlot) {
+      return ((lastSlot - (number * 432_000)) / 432_000 * 100).toFixed(3) + '%'
     }
-    return ''
-  }, [slots, number]);
+    return '';
+  }, [lastSlot, number]);
   const humanCountdown = useMemo(() => {
-    // Массив сортирован, поэтому берём последнее число
-    const [lastSlot] = slots.slice(-1)
     if (lastSlot) {
       const rtf = new Intl.RelativeTimeFormat("en", {
         localeMatcher: "best fit", // other values: "lookup"
         numeric: "always", // other values: "auto"
         style: "long", // other values: "short" or "narrow"
       });
-      const secs = (432_000 - (lastSlot.slot % 432_000)) * 0.4
+      const secs = (432_000 - (lastSlot % 432_000)) * 0.4
       if (secs < 90) return rtf.format(secs, 'seconds') // 1.5 минуты
       if (secs < (90 * 60)) return rtf.format((secs / 60) | 0, 'minutes') // 1.5ч
       if (secs < 1.5 * 86_400) return rtf.format((secs / 3_600) | 0, 'hours') // 1.5д
       return rtf.format((secs / 86_400) | 0, 'days')
     }
     return '...';
-  }, [slots])
+  }, [lastSlot])
   const tooltipForHumanCountdown = useMemo(() => {
-    // Массив сортирован, поэтому берём последнее число
-    const [lastSlot] = slots.slice(-1)
     if (lastSlot) {
-      const secs = (432_000 - (lastSlot.slot % 432_000)) * 0.471
-      return formatDuration(secs) + '. Based on slot duration equals 400ms.'
+      const secs = (432_000 - (lastSlot % 432_000)) * 0.471
+      return formatDuration(secs) + '. Based on 400ms/slot'
     }
     return '...'
-  }, [slots])
+  }, [lastSlot])
 
   return <div className="flex-col justify-start items-end gap-1 inline-flex">
     <div className="self-stretch justify-between items-end inline-flex">

@@ -1,11 +1,10 @@
 import type {FunctionComponent} from "../common/types";
 import {CSSProperties, ReactNode, useCallback, useEffect, useMemo, useState} from "react";
-import {SlotContent, useWebSocketStore} from "../store/websocketStore.ts";
+import {CommitmentStatus, SlotContent, useWebSocketStore} from "../store/websocketStore.ts";
 import {Table, TableColumn} from '@consta/table/Table';
 import {IconInfoCircle} from '@consta/icons/IconInfoCircle';
 import {IconFunnel} from '@consta/icons/IconFunnel';
 import {IconEdit} from '@consta/icons/IconEdit';
-import {IconAdd} from '@consta/icons/IconAdd';
 import {withTooltip} from '@consta/uikit/withTooltip';
 import {Button} from "@consta/uikit/Button";
 import {TooltipProps} from "@consta/uikit/__internal__/src/hocs/withTooltip/withTooltip";
@@ -18,11 +17,14 @@ import {Epoch} from "../components/ui/Epoch.tsx";
 import {HeaderDataCell} from "@consta/table/HeaderDataCell";
 import {SimpleCell} from "../components/ui/SimpleCell.tsx";
 import {useNavigate} from "@tanstack/react-router";
-import {Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis} from 'recharts';
+import {Area, Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, YAxis} from 'recharts';
 import {IconFeed} from "../components/ui/IconFeed.tsx";
 import {ModalFilter} from "../components/ui/ModalFilter.tsx";
 import {percentFromStore} from "../common/utils.ts";
 import {ModalFee} from "../components/ui/ModalFee.tsx";
+import {mockedSlots} from "../features/mockedSlots.ts";
+import {CurveType} from "recharts/types/shape/Curve";
+import {ContentType} from "recharts/types/component/Tooltip";
 
 
 const ButtonWithTooltip = withTooltip({content: 'Тултип сверху'})(Button);
@@ -56,7 +58,6 @@ const CustomTable = ({
                        onEditFee,
                        onEditKeys,
                      }: TableProps) => {
-  const slots = useWebSocketStore(state => state.slots);
   const slots2 = useWebSocketStore(state => state.slots2);
   const disconnect = useWebSocketStore(state => state.disconnect)
   const connect = useWebSocketStore(state => state.connect)
@@ -66,65 +67,8 @@ const CustomTable = ({
 
   const memoFee0 = useCallback(() => onEditFee(0), [onEditFee])
   const memoFee1 = useCallback(() => onEditFee(1), [onEditFee])
+  const memoFee2 = useCallback(() => onEditFee(2), [onEditFee])
 
-  const rowsFromSocket = useMemo(() => {
-    const groupByLeader: Record<string, {
-      slots: SlotContent[],
-      leader: string
-    }> = {}
-    let slice: SlotContent[] = [];
-    let currentLeader = slots[0]?.leader || ''
-    for (let i = 0; i < slots.length; i++) {
-      if (currentLeader === slots[i]?.leader && slice.length < 4) {
-        slice.push(slots[i] as SlotContent)
-      } else {
-        groupByLeader[i] = {
-          slots: slice.reverse(),
-          leader: currentLeader,
-        }
-        slice = [slots[i] as SlotContent]
-        currentLeader = slots[i]?.leader || ''
-      }
-    }
-    // Кладем хвостик, который остался не прибитый
-    // Если будут фильтры, то возможно не нужен трешхолд такой
-    if (slice.length > 0) groupByLeader['last'] = {
-      slots: slice.reverse(),
-      leader: currentLeader,
-    };
-
-    return Object.entries(groupByLeader).map(([
-                                                _, {
-        slots,
-        leader,
-      },
-                                              ]: [
-      string, {
-        slots: SlotContent[],
-        leader: string
-      }
-    ]) => {
-      // let slots = rawSlots.length === 4 ? rawSlots : append(rawSlots)
-      return {
-        id: `${leader}-${slots[0]?.slot || 'empty'}`,
-        leader,
-        slots: slots.map(elt => ({
-          commitment: elt.commitment,
-          slot: elt.slot,
-        })),
-        transactions: buildTransactions(slots),
-        computeUnits: slots.map(elt => ({
-          amount: elt.totalUnitsConsumed.toLocaleString('en-US'),
-          percent: (elt.totalUnitsConsumed / 48_000_000 * 100).toFixed(2),
-        })),
-        earnedSol: slots.map(elt => elt.totalFee),
-        averageFee: slots.map(elt => elt.feeAverage.toFixed(2)),
-        fee0: slots.map(elt => elt.feeLevels[0] || 0),
-        fee1: slots.map(elt => elt.feeLevels[1] || 0),
-        add: [],
-      }
-    })
-  }, [slots])
   const rowsFromSocket2 = useMemo(() => {
     const unsorted = slots2 as Record<string, SlotContent[]>
     return Object.entries(unsorted).sort((a, b) => Number(a[0]) - Number(b[0])).map(([id, slots]) => {
@@ -145,7 +89,7 @@ const CustomTable = ({
         averageFee: slots.map(elt => elt.feeAverage.toFixed(2)),
         fee0: slots.map(elt => elt.feeLevels[0] || 0),
         fee1: slots.map(elt => elt.feeLevels[1] || 0),
-        add: [],
+        fee2: slots.map(elt => elt.feeLevels[2] || 0),
       }
     })
   }, [slots2])
@@ -153,7 +97,7 @@ const CustomTable = ({
   const isTransactionsApplied = useMemo(() => {
     return !!readwriteKeys.length || !!readonlyKeys.length
   }, [readwriteKeys.length, readonlyKeys.length])
-  const columns: TableColumn<typeof rowsFromSocket[number]>[] = useMemo(() => {
+  const columns: TableColumn<typeof rowsFromSocket2[number]>[] = useMemo(() => {
     return [
       {
         title: 'Validator',
@@ -227,7 +171,6 @@ const CustomTable = ({
       }, {
         width: 'auto',
         minWidth: 160,
-
         title: 'Fee p' + percentFromStore(percents[0]),
         accessor: 'fee0',
         renderHeaderCell: ({title}) => <HeaderDataCell
@@ -257,21 +200,26 @@ const CustomTable = ({
         renderCell: ({row}) => <SimpleCell list={row.fee1}/>,
 
       }, {
-        title: 'Add',
-        accessor: 'add',
+        width: 'auto',
+        minWidth: 160,
+
+        title: 'Fee p' + percentFromStore(percents[2]),
+        accessor: 'fee2',
         renderHeaderCell: ({title}) => <HeaderDataCell
           controlRight={[
-            <Button as="span" iconSize="s" onlyIcon={true} view="clear" iconRight={IconAdd}/>,
+            <Button as="span" iconSize="s" onlyIcon={true} view="clear" iconRight={IconEdit}
+                    onClick={memoFee2}/>,
           ]}
         >
           {title}
         </HeaderDataCell>,
+        renderCell: ({row}) => <SimpleCell list={row.fee2}/>,
+
       },
     ]
-  }, [isTransactionsApplied, onEditKeys, percents, memoFee0, memoFee1]);
+  }, [isTransactionsApplied, onEditKeys, percents, memoFee0, memoFee1, memoFee2]);
 
   useEffect(() => {
-    console.log('effect with connect!');
     connect();
 
     return () => {
@@ -279,42 +227,43 @@ const CustomTable = ({
     };
   }, [connect, disconnect]);
 
+  // Этим проверял, что построение без UI KIT быстрее
   const isSimple = false;
   if (isSimple) return <>
     <div className="w-full overflow-x-auto">
-      {rowsFromSocket2.map((row) => {
+      {rowsFromSocket2.map((row, _idx) => {
         const key = `${row.leader}-${((row.slots[0]?.slot || 0) / 4) | 0}`
         return <div className="border flex flex-row gap-1" key={key}>
           <div className="bg-red-100">{row.leader}</div>
           <div>
             {row.slots.map((slot) => (<div className="bg-green-100" key={slot.slot}>
-                {slot.commitment}-{slot.slot}
-              </div>))}
+              {slot.commitment}-{slot.slot}
+            </div>))}
           </div>
           <div>
             {row.fee0.map((elt, idx) => (<div className="bg-blue-100" key={idx}>
-                {elt}
-              </div>))}
+              {elt}
+            </div>))}
           </div>
           <div>
             {row.fee1.map((elt, idx) => (<div className="bg-red-100" key={idx}>
-                {elt}
-              </div>))}
+              {elt}
+            </div>))}
           </div>
           <div>
             {row.averageFee.map((elt, idx) => (<div className="bg-green-100" key={idx}>
-                {elt}
-              </div>))}
+              {elt}
+            </div>))}
           </div>
           <div>
             {row.earnedSol.map((elt, idx) => (<div className="bg-blue-100" key={idx}>
-                {elt}
-              </div>))}
+              {elt}
+            </div>))}
           </div>
           <div>
             {row.computeUnits.map((elt, idx) => (<div className="bg-red-100" key={idx}>
-                {elt.amount}-{elt.percent}
-              </div>))}
+              {elt.amount}-{elt.percent}
+            </div>))}
           </div>
         </div>
       })}
@@ -322,12 +271,12 @@ const CustomTable = ({
   </>
 
 
-  if (!slots.length) return <span
+  if (!rowsFromSocket2.length) return <span
     className="w-full text-center text-xl font-bold">Loading...</span>
 
-  return <div className="w-full overflow-x-auto">
+  return <div className="w-full h-full overflow-x-auto">
     <Table className="overflow-scroll" columns={columns} rows={[...rowsFromSocket2].reverse()}
-           style={{maxHeight: 400}}
+           style={{maxHeight: '100%'}}
            virtualScroll={true}
            resizable={undefined}/>
   </div>
@@ -339,11 +288,16 @@ export const HomeNew = (): FunctionComponent => {
   const [editedFeeIdx, setEditedFeeIdx] = useState(-1)
 
   const navigate = useNavigate()
+  // const connect = useWebSocketStore(state => state.connect)
+  // connect()
+
+  // return <ExampleAreaTwo />
 
   return (<>
-    <button className="absolute top-2 left-2 rounded bg-amber-300" onClick={() => navigate({to: '/homeOld'})}>click to view Table from @consta\uikit (old)
+    <button className="absolute top-2 left-2 rounded bg-amber-300" onClick={() => navigate({to: '/homeOld'})}>click to
+      view Table from @consta\uikit (old)
     </button>
-    <div className="px-20 py-5 bg-white w-full flex-col justify-start items-start gap-8 inline-flex">
+    <div className="px-20 py-5 bg-white w-full flex-col justify-start items-start gap-8 inline-flex h-[100vh]">
       <div className="self-stretch justify-between items-center inline-flex">
         <div className="justify-start items-center gap-2 flex">
           <IconFeed className="w-5 h-5 relative"></IconFeed>
@@ -355,282 +309,21 @@ export const HomeNew = (): FunctionComponent => {
         </div>
         <Epoch/>
       </div>
-      <div className="self-stretch justify-start items-center gap-5 inline-flex">
-        <div className="w-[413px] h-[300px] relative">
-          <div
-            className="w-[413px] h-[300px] left-0 top-0 absolute flex-col justify-start items-start gap-5 inline-flex">
-            <div className="self-stretch py-1 justify-start items-center inline-flex">
-              <div className="grow shrink basis-0 h-4 justify-start items-start gap-3 flex">
-                <div className="justify-start items-center gap-1 flex">
-                  <div className="w-4 h-4 relative">
-                    <div className="w-2 h-2 left-[4px] top-[4px] absolute bg-[#f38b01] rounded-full"></div>
-                  </div>
-                  <div className="text-[#002033] text-[10px] font-normal font-['Inter'] leading-[15px]">Compute units
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="h-64 relative">
-              <div
-                className="w-7 h-[206px] pl-px left-0 top-0 absolute flex-col justify-center items-center inline-flex">
-                <div className="w-[27px] h-[206px] flex-col justify-between items-end inline-flex">
-                  <div className="pl-3 justify-end items-center gap-0.5 inline-flex">
-                    <div className="text-right text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">4</div>
-                    <div className="w-[5px] h-[0px] border border-[#004166]/20"></div>
-                  </div>
-                  <div className="pl-3 justify-end items-center gap-0.5 inline-flex">
-                    <div className="text-right text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">3</div>
-                  </div>
-                  <div className="pl-3 justify-end items-center gap-0.5 inline-flex">
-                    <div className="text-right text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">2</div>
-                  </div>
-                  <div className="pl-3.5 justify-end items-center gap-0.5 inline-flex">
-                    <div className="text-right text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">1</div>
-                  </div>
-                  <div className="pl-3 justify-end items-center gap-0.5 inline-flex">
-                    <div className="text-right text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">0</div>
-                    <div className="w-[5px] h-[0px] border border-[#004166]/20"></div>
-                  </div>
-                </div>
-              </div>
-              <div className="w-[385px] h-[206px] left-[28px] top-0 absolute">
-                <div className="w-[385px] h-[206px] left-0 top-0 absolute justify-center items-center inline-flex">
-                  <div className="w-[385px] h-[206px] bg-white border border-[#004166]/20"></div>
-                </div>
-                <div
-                  className="w-[385px] h-[206px] left-0 top-0 absolute flex-col justify-between items-center inline-flex"></div>
-                <div
-                  className="w-[385px] h-[206px] left-0 top-0 absolute justify-between items-center inline-flex"></div>
-              </div>
-              <div
-                className="w-[385px] h-7 pb-px left-[28px] top-[206px] absolute justify-center items-center inline-flex">
-                <div className="w-[385px] h-[27px] justify-between items-start inline-flex">
-                  <div className="pr-1 origin-top-left rotate-90 justify-start items-center flex">
-                    <div className="w-[5px] h-[0px] border border-[#004166]/20"></div>
-                    <div
-                      className="origin-top-left -rotate-90 text-center text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">0
-                    </div>
-                  </div>
-                  <div className="pr-1 origin-top-left rotate-90 justify-start items-center flex">
-                    <div
-                      className="origin-top-left -rotate-90 text-center text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">1
-                    </div>
-                  </div>
-                  <div className="pr-1 origin-top-left rotate-90 justify-start items-center flex">
-                    <div
-                      className="origin-top-left -rotate-90 text-center text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">2
-                    </div>
-                  </div>
-                  <div className="pr-1 origin-top-left rotate-90 justify-start items-center flex">
-                    <div
-                      className="origin-top-left -rotate-90 text-center text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">3
-                    </div>
-                  </div>
-                  <div className="pr-1 origin-top-left rotate-90 justify-start items-center flex">
-                    <div
-                      className="origin-top-left -rotate-90 text-center text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">4
-                    </div>
-                  </div>
-                  <div className="pr-1 origin-top-left rotate-90 justify-start items-center flex">
-                    <div className="w-[5px] h-[0px] border border-[#004166]/20"></div>
-                    <div
-                      className="origin-top-left -rotate-90 text-center text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">5
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="w-[383px] h-[206px] left-[29px] top-[44px] absolute"></div>
+      <div className="flex flex-nowrap gap-4 w-full">
+        <div className="w-full">
+          <h1 className="text-xl mb-8">Compute units</h1>
+          <ExampleAreaOne />
         </div>
-        <div className="w-[413px] h-[300px] relative">
-          <div
-            className="w-[413px] h-[300px] left-0 top-0 absolute flex-col justify-start items-start gap-5 inline-flex">
-            <div className="self-stretch py-1 justify-start items-center inline-flex">
-              <div className="grow shrink basis-0 h-4 justify-start items-start gap-3 flex">
-                <div className="justify-start items-center gap-1 flex">
-                  <div className="w-4 h-4 relative">
-                    <div className="w-2 h-2 left-[4px] top-[4px] absolute bg-[#f2c94c] rounded-full"></div>
-                  </div>
-                  <div className="text-[#002033] text-[10px] font-normal font-['Inter'] leading-[15px]">Earned SOL</div>
-                </div>
-              </div>
-            </div>
-            <div className="h-64 relative">
-              <div
-                className="w-7 h-[206px] pl-px left-0 top-0 absolute flex-col justify-center items-center inline-flex">
-                <div className="w-[27px] h-[206px] flex-col justify-between items-end inline-flex">
-                  <div className="pl-3 justify-end items-center gap-0.5 inline-flex">
-                    <div className="text-right text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">4</div>
-                    <div className="w-[5px] h-[0px] border border-[#004166]/20"></div>
-                  </div>
-                  <div className="pl-3 justify-end items-center gap-0.5 inline-flex">
-                    <div className="text-right text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">3</div>
-                  </div>
-                  <div className="pl-3 justify-end items-center gap-0.5 inline-flex">
-                    <div className="text-right text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">2</div>
-                  </div>
-                  <div className="pl-3.5 justify-end items-center gap-0.5 inline-flex">
-                    <div className="text-right text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">1</div>
-                  </div>
-                  <div className="pl-3 justify-end items-center gap-0.5 inline-flex">
-                    <div className="text-right text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">0</div>
-                    <div className="w-[5px] h-[0px] border border-[#004166]/20"></div>
-                  </div>
-                </div>
-              </div>
-              <div className="w-[385px] h-[206px] left-[28px] top-0 absolute">
-                <div className="w-[385px] h-[206px] left-0 top-0 absolute justify-center items-center inline-flex">
-                  <div className="w-[385px] h-[206px] bg-white border border-[#004166]/20"></div>
-                </div>
-                <div
-                  className="w-[385px] h-[206px] left-0 top-0 absolute flex-col justify-between items-center inline-flex"></div>
-                <div
-                  className="w-[385px] h-[206px] left-0 top-0 absolute justify-between items-center inline-flex"></div>
-              </div>
-              <div
-                className="w-[385px] h-7 pb-px left-[28px] top-[206px] absolute justify-center items-center inline-flex">
-                <div className="w-[385px] h-[27px] justify-between items-start inline-flex">
-                  <div className="pr-1 origin-top-left rotate-90 justify-start items-center flex">
-                    <div className="w-[5px] h-[0px] border border-[#004166]/20"></div>
-                    <div
-                      className="origin-top-left -rotate-90 text-center text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">0
-                    </div>
-                  </div>
-                  <div className="pr-1 origin-top-left rotate-90 justify-start items-center flex">
-                    <div
-                      className="origin-top-left -rotate-90 text-center text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">1
-                    </div>
-                  </div>
-                  <div className="pr-1 origin-top-left rotate-90 justify-start items-center flex">
-                    <div
-                      className="origin-top-left -rotate-90 text-center text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">2
-                    </div>
-                  </div>
-                  <div className="pr-1 origin-top-left rotate-90 justify-start items-center flex">
-                    <div
-                      className="origin-top-left -rotate-90 text-center text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">3
-                    </div>
-                  </div>
-                  <div className="pr-1 origin-top-left rotate-90 justify-start items-center flex">
-                    <div
-                      className="origin-top-left -rotate-90 text-center text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">4
-                    </div>
-                  </div>
-                  <div className="pr-1 origin-top-left rotate-90 justify-start items-center flex">
-                    <div className="w-[5px] h-[0px] border border-[#004166]/20"></div>
-                    <div
-                      className="origin-top-left -rotate-90 text-center text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">5
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="w-[383px] h-[206px] left-[29px] top-[44px] absolute"></div>
+        <div className="w-full">
+          <h1 className="text-xl mb-8">Earned SOL</h1>
+          <ExampleAreaTwo />
+
         </div>
-        <div className="w-[413px] h-[300px] relative">
-          <div
-            className="w-[413px] h-[300px] left-0 top-0 absolute flex-col justify-start items-start gap-5 inline-flex">
-            <div className="self-stretch py-1 justify-start items-center inline-flex">
-              <div className="grow shrink basis-0 h-4 justify-start items-center gap-3 flex">
-                <div className="justify-start items-center gap-1 flex">
-                  <div className="w-4 h-4 relative"></div>
-                  <div className="text-[#002033] text-[10px] font-semibold font-['Inter'] leading-[15px]">Fees</div>
-                </div>
-                <div className="justify-start items-center gap-1 flex">
-                  <div className="w-4 h-4 relative">
-                    <div className="w-2 h-2 left-[4px] top-[4px] absolute bg-[#f38b00] rounded-full"></div>
-                  </div>
-                  <div className="text-[#002033] text-[10px] font-normal font-['Inter'] leading-[15px]">average</div>
-                </div>
-                <div className="justify-start items-center gap-1 flex">
-                  <div className="w-4 h-4 relative">
-                    <div className="w-2 h-2 left-[4px] top-[4px] absolute bg-[#f2c94c] rounded-full"></div>
-                  </div>
-                  <div className="text-[#002033] text-[10px] font-normal font-['Inter'] leading-[15px]">p50</div>
-                </div>
-                <div className="justify-start items-center gap-1 flex">
-                  <div className="w-4 h-4 relative">
-                    <div className="w-2 h-2 left-[4px] top-[4px] absolute bg-[#56b8f2] rounded-full"></div>
-                  </div>
-                  <div className="text-[#002033] text-[10px] font-normal font-['Inter'] leading-[15px]">p90</div>
-                </div>
-              </div>
-            </div>
-            <div className="h-64 relative">
-              <div
-                className="w-7 h-[206px] pl-px left-0 top-0 absolute flex-col justify-center items-center inline-flex">
-                <div className="w-[27px] h-[206px] flex-col justify-between items-end inline-flex">
-                  <div className="pl-3 justify-end items-center gap-0.5 inline-flex">
-                    <div className="text-right text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">4</div>
-                    <div className="w-[5px] h-[0px] border border-[#004166]/20"></div>
-                  </div>
-                  <div className="pl-3 justify-end items-center gap-0.5 inline-flex">
-                    <div className="text-right text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">3</div>
-                  </div>
-                  <div className="pl-3 justify-end items-center gap-0.5 inline-flex">
-                    <div className="text-right text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">2</div>
-                  </div>
-                  <div className="pl-3.5 justify-end items-center gap-0.5 inline-flex">
-                    <div className="text-right text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">1</div>
-                  </div>
-                  <div className="pl-3 justify-end items-center gap-0.5 inline-flex">
-                    <div className="text-right text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">0</div>
-                    <div className="w-[5px] h-[0px] border border-[#004166]/20"></div>
-                  </div>
-                </div>
-              </div>
-              <div className="w-[385px] h-[206px] left-[28px] top-0 absolute">
-                <div className="w-[385px] h-[206px] left-0 top-0 absolute justify-center items-center inline-flex">
-                  <div className="w-[385px] h-[206px] bg-white border border-[#004166]/20"></div>
-                </div>
-                <div
-                  className="w-[385px] h-[206px] left-0 top-0 absolute flex-col justify-between items-center inline-flex"></div>
-                <div
-                  className="w-[385px] h-[206px] left-0 top-0 absolute justify-between items-center inline-flex"></div>
-              </div>
-              <div
-                className="w-[385px] h-7 pb-px left-[28px] top-[206px] absolute justify-center items-center inline-flex">
-                <div className="w-[385px] h-[27px] justify-between items-start inline-flex">
-                  <div className="pr-1 origin-top-left rotate-90 justify-start items-center flex">
-                    <div className="w-[5px] h-[0px] border border-[#004166]/20"></div>
-                    <div
-                      className="origin-top-left -rotate-90 text-center text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">0
-                    </div>
-                  </div>
-                  <div className="pr-1 origin-top-left rotate-90 justify-start items-center flex">
-                    <div
-                      className="origin-top-left -rotate-90 text-center text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">1
-                    </div>
-                  </div>
-                  <div className="pr-1 origin-top-left rotate-90 justify-start items-center flex">
-                    <div
-                      className="origin-top-left -rotate-90 text-center text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">2
-                    </div>
-                  </div>
-                  <div className="pr-1 origin-top-left rotate-90 justify-start items-center flex">
-                    <div
-                      className="origin-top-left -rotate-90 text-center text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">3
-                    </div>
-                  </div>
-                  <div className="pr-1 origin-top-left rotate-90 justify-start items-center flex">
-                    <div
-                      className="origin-top-left -rotate-90 text-center text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">4
-                    </div>
-                  </div>
-                  <div className="pr-1 origin-top-left rotate-90 justify-start items-center flex">
-                    <div className="w-[5px] h-[0px] border border-[#004166]/20"></div>
-                    <div
-                      className="origin-top-left -rotate-90 text-center text-[#002033] text-xs font-normal font-['Inter'] leading-[18px]">5
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="w-96 h-[206px] left-[29px] top-[44px] absolute"></div>
+        <div className="w-full">
+          <h1 className="text-xl mb-8">Fees</h1>
+          <ExampleAreaThree />
         </div>
+
       </div>
       <CustomTable onEditFee={setEditedFeeIdx} onEditKeys={filterModalControls.on}/>
       <ModalFee editedFeeIdx={editedFeeIdx} isVisible={editedFeeIdx >= 0} onClose={() => setEditedFeeIdx(-1)}/>
@@ -639,59 +332,265 @@ export const HomeNew = (): FunctionComponent => {
   </>);
 }
 
-export const ExampleArea = () => {
-  const data = [
-    {
-      name: 'Page A',
-      rangeOne: 4000,
-      amt: 2400,
-    }, {
-      name: 'Page B',
-      rangeOne: 3000,
-      amt: 2210,
-    }, {
-      name: 'Page C',
-      rangeOne: 2000,
-      rangeTwo: 9800,
-      amt: 2290,
-    }, {
-      name: 'Page D',
-      rangeTwo: 3908,
-      amt: 2000,
-    }, {
-      name: 'Page E',
-      rangeTwo: 4800,
-      rangeThree: 3190,
-      amt: 2181,
-    }, {
-      name: 'Page F',
-      rangeThree: 2390,
-      amt: 2500,
-    }, {
-      name: 'Page G',
-      rangeThree: 3490,
-      amt: 2100,
-    },
-  ];
+
+const CustomTooltip:ContentType<any, any> = ({
+                         active,
+                         payload,
+                       }) => {
+  if (active && payload && payload.length) {
+    if (payload[0]) {
+      const elt = payload[0].payload;
+      return <div className="recharts-default-tooltip">
+        <p className="recharts-tooltip-label">Slot: {elt.x.toLocaleString('en-US')} ({elt.commitment})</p>
+        <ul className="recharts-tooltip-item-list">
+          <li className="recharts-tooltip-item">
+            <span className="recharts-tooltip-item-name">Tracked Items</span>
+            <span className="recharts-tooltip-item-separator"> : </span>
+            <span className="recharts-tooltip-item-value">{elt.y.toLocaleString('en-US')}</span>
+          </li>
+          <li className="recharts-tooltip-item">
+            <span className="recharts-tooltip-item-name">DEBUG processed</span>
+            <span className="recharts-tooltip-item-separator"> : </span>
+            <span className="recharts-tooltip-item-value">{elt.value.processed}</span>
+          </li>
+          <li className="recharts-tooltip-item">
+            <span className="recharts-tooltip-item-name">DEBUG confirmed</span>
+            <span className="recharts-tooltip-item-separator"> : </span>
+            <span className="recharts-tooltip-item-value">{elt.value.confirmed}</span>
+          </li>
+          <li className="recharts-tooltip-item">
+            <span className="recharts-tooltip-item-name">DEBUG finalized</span>
+            <span className="recharts-tooltip-item-separator"> : </span>
+            <span className="recharts-tooltip-item-value">{elt.value.finalized}</span>
+          </li>
+        </ul>
+      </div>
+    }
+  }
+
+  return null;
+};
+
+// с графиками, по x-axis у нас слот, по y-axis сам понимаешь что, compute units, earned sol, average fee / p50 / p90
+
+
+type PlotInfo = {
+  x: number;
+  commitment: CommitmentStatus;
+  y: number;
+  value: Record<CommitmentStatus, null | number>
+}
+type FeesInfo = {
+  x: number;
+  commitment: CommitmentStatus;
+  y: number;
+  fee0: number|null;
+  fee1: number|null;
+  fee2: number|null;
+}
+export const ExampleAreaOne = () => {
+
+  const slots2 = useWebSocketStore(state => state.slots2);
+  // const disconnect = useWebSocketStore(state => state.disconnect)
+  // const connect = useWebSocketStore(state => state.connect)
+
+  const [type, _setType] = useState<CurveType>('monotone');
+
+
+
+  const data = useMemo(() => {
+    const entries = Object.entries(slots2);
+    const packedData = entries.reduce<PlotInfo[]>((acc, [_groupIdx, slots]) => {
+      const chunk = slots.map(elt => {
+        const obj = {
+          x: elt.slot,
+          y: elt.totalUnitsConsumed,
+          commitment: elt.commitment,
+          value: {
+            confirmed: null,
+            finalized: null,
+            processed: null,
+          },
+        } satisfies PlotInfo
+        // Я хз чего он ругается, но заглушим
+        obj.value[elt.commitment] = obj.y as unknown as null;
+        return obj;
+      })
+      const sorted = chunk.sort((a, b) => a.x - b.x)
+      acc.push(...sorted)
+      return acc
+    }, [])
+    // Второй раз пробегаемся, закрываем дырки, если статусы разные
+    const filledGapsData = packedData.map((elt, idx, arr) => {
+      const prevPrev = arr[idx - 2];
+      const prev = arr[idx - 1]
+      if(prev) {
+        if(prev.commitment !== elt.commitment) {
+          prev.value[elt.commitment] = prev.y
+        }
+        // Corner Case ситуации A A A B A A
+        if(prevPrev) {
+          if(prev.commitment !== elt.commitment && prevPrev.commitment === elt.commitment) {
+            elt.value[prev.commitment] = elt.y;
+            prev.value[prevPrev.commitment] = null;
+          }
+        }
+      }
+      return elt
+    })
+    return filledGapsData
+  }, [slots2])
   return <div style={{
     width: '100%',
   }}>
     <ResponsiveContainer width="100%" height={200}>
-      <AreaChart width={500} height={200} data={data} margin={{
+      <ComposedChart width={500} height={200} data={data} margin={{
         top: 10,
-        right: 30,
-        left: 0,
+        right: 10,
+        left: 40,
         bottom: 0,
       }}>
         <CartesianGrid strokeDasharray="3 3"/>
-        <XAxis dataKey="name"/>
-        <YAxis/>
-        <Tooltip/>
-        <Area type="monotone" dataKey="rangeOne" stroke="#8884d8" fill="blue"/>
-        <Area type="monotone" dataKey="rangeTwo" stroke="#8884d8" fill="red"/>
-        <Area type="monotone" dataKey="rangeThree" stroke="#8884d8" fill="green"/>
-      </AreaChart>
+        <YAxis scale="auto"/>
+        <Tooltip content={<CustomTooltip/>} />
+        <Area type={type} dataKey="value.processed" stroke="gray" fill="gray" opacity={1}
+              isAnimationActive={false}/>
+        <Area type={type} dataKey="value.confirmed" stroke="yellow" fill="yellow" opacity={1}
+              isAnimationActive={false}/>
+        <Area type={type} dataKey="value.finalized" stroke="green" fill="green" opacity={1}
+              isAnimationActive={false}/>
+      </ComposedChart>
     </ResponsiveContainer>
   </div>;
 }
+export const ExampleAreaTwo = () => {
 
+  const slots2 = useWebSocketStore(state => state.slots2);
+  // const disconnect = useWebSocketStore(state => state.disconnect)
+  // const connect = useWebSocketStore(state => state.connect)
+
+  const [type, _setType] = useState<CurveType>('monotone');
+
+
+
+  const data = useMemo(() => {
+    const entries = Object.entries(slots2);
+    const packedData = entries.reduce<PlotInfo[]>((acc, [_groupIdx, slots]) => {
+      const chunk = slots.map(elt => {
+        const obj = {
+          x: elt.slot,
+          y: elt.totalFee,
+          commitment: elt.commitment,
+          value: {
+            confirmed: null,
+            finalized: null,
+            processed: null,
+          },
+        } satisfies PlotInfo
+        // Я хз чего он ругается, но заглушим
+        obj.value[elt.commitment] = obj.y as unknown as null;
+        return obj;
+      })
+      const sorted = chunk.sort((a, b) => a.x - b.x)
+      acc.push(...sorted)
+      return acc
+    }, [])
+    // Второй раз пробегаемся, закрываем дырки, если статусы разные
+    const filledGapsData = packedData.map((elt, idx, arr) => {
+      const prevPrev = arr[idx - 2];
+      const prev = arr[idx - 1]
+      if(prev) {
+        if(prev.commitment !== elt.commitment) {
+          prev.value[elt.commitment] = prev.y
+        }
+        // Corner Case ситуации A A A B A A
+        if(prevPrev) {
+          if(prev.commitment !== elt.commitment && prevPrev.commitment === elt.commitment) {
+            elt.value[prev.commitment] = elt.y;
+            prev.value[prevPrev.commitment] = null;
+          }
+        }
+      }
+      return elt
+    })
+    return filledGapsData
+  }, [slots2])
+  return <div style={{
+    width: '100%',
+  }}>
+    <ResponsiveContainer width="100%" height={200}>
+      <ComposedChart width={500} height={200} data={data} margin={{
+        top: 10,
+        right: 10,
+        left: 40,
+        bottom: 0,
+      }}>
+        <CartesianGrid strokeDasharray="3 3"/>
+        <YAxis scale="auto"/>
+        <Tooltip content={<CustomTooltip/>} />
+        <Area type={type} dataKey="value.processed" stroke="gray" fill="gray" opacity={1}
+              isAnimationActive={false}/>
+        <Area type={type} dataKey="value.confirmed" stroke="yellow" fill="yellow" opacity={1}
+              isAnimationActive={false}/>
+        <Area type={type} dataKey="value.finalized" stroke="green" fill="green" opacity={1}
+              isAnimationActive={false}/>
+      </ComposedChart>
+    </ResponsiveContainer>
+  </div>;
+}
+export const ExampleAreaThree = () => {
+
+  const slots2 = useWebSocketStore(state => state.slots2);
+  // const disconnect = useWebSocketStore(state => state.disconnect)
+  // const connect = useWebSocketStore(state => state.connect)
+
+  const [type, _setType] = useState<CurveType>('monotone');
+
+
+
+  const data = useMemo(() => {
+    const entries = Object.entries(slots2);
+    const packedData = entries.reduce<FeesInfo[]>((acc, [_groupIdx, slots]) => {
+      const chunk = slots.map(elt => {
+        const obj = {
+          x: elt.slot,
+          y: elt.feeAverage,
+          commitment: elt.commitment,
+          fee0: elt.feeLevels[0] || null,
+          fee1: elt.feeLevels[1] || null,
+          fee2: elt.feeLevels[2] || null,
+        } satisfies FeesInfo
+        return obj;
+      })
+      const sorted = chunk.sort((a, b) => a.x - b.x)
+      acc.push(...sorted)
+      return acc
+    }, [])
+    return packedData
+  }, [slots2])
+  return <div style={{
+    width: '100%',
+  }}>
+    <ResponsiveContainer width="100%" height={200}>
+      <ComposedChart width={500} height={200} data={data} margin={{
+        top: 10,
+        right: 10,
+        left: 40,
+        bottom: 0,
+      }}>
+        <CartesianGrid strokeDasharray="3 3"/>
+        <YAxis scale="sqrt"/>
+        <Tooltip />
+        <Line type={type} dataKey="y" stroke="gray" fill="gray" opacity={0.5}
+              dot={false}
+              isAnimationActive={false}/>
+        <Area type={type} dataKey="fee0" stroke="blue" fill="blue" opacity={0.5}
+              isAnimationActive={false}/>
+        <Area type={type} dataKey="fee1" stroke="green" fill="green" opacity={0.3}
+              isAnimationActive={false}/>
+        <Area type={type} dataKey="fee2" stroke="red" fill="red" opacity={0.4}
+              isAnimationActive={false}/>
+      </ComposedChart>
+    </ResponsiveContainer>
+  </div>;
+}
