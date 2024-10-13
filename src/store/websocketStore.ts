@@ -164,7 +164,7 @@ export const useWebSocketStore = create<WebSocketState>((set) => ({
           // Это сообщение, что подписка удалась и нет проблем
           return;
         }
-        console.log('unrecognized2', data);
+        console.warn('unrecognized', data);
       }
       socket.onmessage = (event) => {
         queue.push(event)
@@ -205,9 +205,8 @@ export const useWebSocketStore = create<WebSocketState>((set) => ({
         socket.onmessage = function (e: MessageEvent) {
           queue.push(e)
           // Костыль для перфоманса, можно ставить 1 сек и обновления будет меньше
-          if(Date.now() - lastProcessedTime > 1) {
-            queue.length > 100 && console.log('queued from WS:', queue.length);
-            // TODO перевернуть список, проверить что порядок слотов на месте.
+          if(Date.now() - lastProcessedTime > 250) {
+            queue.length > 25 && console.log('queued from WS:', queue.length);
             queue.forEach(handleMessage)
             queue.length = 0;
             lastProcessedTime = Date.now();

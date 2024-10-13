@@ -1,5 +1,5 @@
 import type {FunctionComponent} from "../common/types";
-import {CSSProperties, ReactNode, useCallback, useEffect, useMemo, useState} from "react";
+import {CSSProperties, ReactNode, useCallback, useDeferredValue, useEffect, useMemo, useState} from "react";
 import {CommitmentStatus, SlotContent, useWebSocketStore} from "../store/websocketStore.ts";
 import {Table, TableColumn} from '@consta/table/Table';
 import {IconInfoCircle} from '@consta/icons/IconInfoCircle';
@@ -25,6 +25,7 @@ import {ModalFee} from "../components/ui/ModalFee.tsx";
 import {mockedSlots} from "../features/mockedSlots.ts";
 import {CurveType} from "recharts/types/shape/Curve";
 import {ContentType} from "recharts/types/component/Tooltip";
+import {Payload} from "recharts/types/component/DefaultTooltipContent";
 
 
 const ButtonWithTooltip = withTooltip({content: 'Тултип сверху'})(Button);
@@ -71,7 +72,7 @@ const CustomTable = ({
 
   const rowsFromSocket2 = useMemo(() => {
     const unsorted = slots2 as Record<string, SlotContent[]>
-    return Object.entries(unsorted).sort((a, b) => Number(a[0]) - Number(b[0])).map(([id, slots]) => {
+    const result = Object.entries(unsorted).sort((a, b) => Number(a[0]) - Number(b[0])).map(([id, slots]) => {
       const leader = slots[0]?.leader || 'UNKNOWN'
       return {
         id,
@@ -92,6 +93,7 @@ const CustomTable = ({
         fee2: slots.map(elt => elt.feeLevels[2] || 0),
       }
     })
+    return [...result].reverse();
   }, [slots2])
 
   const isTransactionsApplied = useMemo(() => {
@@ -227,6 +229,8 @@ const CustomTable = ({
     };
   }, [connect, disconnect]);
 
+  const deferredValue = useDeferredValue(rowsFromSocket2)
+
   // Этим проверял, что построение без UI KIT быстрее
   const isSimple = false;
   if (isSimple) return <>
@@ -275,7 +279,7 @@ const CustomTable = ({
     className="w-full text-center text-xl font-bold">Loading...</span>
 
   return <div className="w-full h-full overflow-x-auto">
-    <Table className="overflow-scroll" columns={columns} rows={[...rowsFromSocket2].reverse()}
+    <Table className="overflow-scroll" columns={columns} rows={deferredValue}
            style={{maxHeight: '100%'}}
            virtualScroll={true}
            resizable={undefined}/>
@@ -283,15 +287,34 @@ const CustomTable = ({
 }
 
 
+const PlotLayer = () => {
+  const [isArea, areaControls] = useFlag(true)
+  return <>
+    <Button label="Change Plot type" onClick={areaControls.toggle}/>
+    <div className="flex flex-nowrap gap-4 w-full">
+      <div className="w-full">
+        <h1 className="text-xl mb-8">Compute units</h1>
+        {isArea ? <ExampleAreaOne/> : <ExampleAreaOneBar/>}
+      </div>
+      <div className="w-full">
+        <h1 className="text-xl mb-8">Earned SOL</h1>
+        {isArea ? <ExampleAreaTwo/> : <ExampleAreaTwoBar/>}
+
+      </div>
+      <div className="w-full">
+        <h1 className="text-xl mb-8">Fees</h1>
+        <ExampleAreaThree/>
+      </div>
+
+    </div>
+  </>
+}
+
 export const HomeNew = (): FunctionComponent => {
   const [filterModalShown, filterModalControls] = useFlag(false)
   const [editedFeeIdx, setEditedFeeIdx] = useState(-1)
 
   const navigate = useNavigate()
-  // const connect = useWebSocketStore(state => state.connect)
-  // connect()
-
-  // return <ExampleAreaTwo />
 
   return (<>
     <button className="absolute top-2 left-2 rounded bg-amber-300" onClick={() => navigate({to: '/homeOld'})}>click to
@@ -309,22 +332,7 @@ export const HomeNew = (): FunctionComponent => {
         </div>
         <Epoch/>
       </div>
-      <div className="flex flex-nowrap gap-4 w-full">
-        <div className="w-full">
-          <h1 className="text-xl mb-8">Compute units</h1>
-          <ExampleAreaOne />
-        </div>
-        <div className="w-full">
-          <h1 className="text-xl mb-8">Earned SOL</h1>
-          <ExampleAreaTwo />
-
-        </div>
-        <div className="w-full">
-          <h1 className="text-xl mb-8">Fees</h1>
-          <ExampleAreaThree />
-        </div>
-
-      </div>
+      <PlotLayer />
       <CustomTable onEditFee={setEditedFeeIdx} onEditKeys={filterModalControls.on}/>
       <ModalFee editedFeeIdx={editedFeeIdx} isVisible={editedFeeIdx >= 0} onClose={() => setEditedFeeIdx(-1)}/>
       <ModalFilter isVisible={filterModalShown} onClose={filterModalControls.off}/>
@@ -333,7 +341,7 @@ export const HomeNew = (): FunctionComponent => {
 }
 
 
-const CustomTooltip:ContentType<any, any> = ({
+const CustomTooltip: ContentType<any, any> = ({
                          active,
                          payload,
                        }) => {
@@ -370,9 +378,6 @@ const CustomTooltip:ContentType<any, any> = ({
 
   return null;
 };
-
-// с графиками, по x-axis у нас слот, по y-axis сам понимаешь что, compute units, earned sol, average fee / p50 / p90
-
 
 type PlotInfo = {
   x: number;
@@ -463,6 +468,63 @@ export const ExampleAreaOne = () => {
     </ResponsiveContainer>
   </div>;
 }
+export const ExampleAreaOneBar = () => {
+
+  const slots2 = useWebSocketStore(state => state.slots2);
+  // const disconnect = useWebSocketStore(state => state.disconnect)
+  // const connect = useWebSocketStore(state => state.connect)
+
+  const [_type, _setType] = useState<CurveType>('monotone');
+
+
+
+  const data = useMemo(() => {
+    const entries = Object.entries(slots2);
+    const packedData = entries.reduce<PlotInfo[]>((acc, [_groupIdx, slots]) => {
+      const chunk = slots.map(elt => {
+        const obj = {
+          x: elt.slot,
+          y: elt.totalUnitsConsumed,
+          commitment: elt.commitment,
+          value: {
+            confirmed: null,
+            finalized: null,
+            processed: null,
+          },
+        } satisfies PlotInfo
+        // Я хз чего он ругается, но заглушим
+        obj.value[elt.commitment] = obj.y as unknown as null;
+        return obj;
+      })
+      const sorted = chunk.sort((a, b) => a.x - b.x)
+      acc.push(...sorted)
+      return acc
+    }, [])
+    return packedData
+  }, [slots2])
+  return <div style={{
+    width: '100%',
+  }}>
+    <ResponsiveContainer width="100%" height={200}>
+      <ComposedChart width={500} height={200} data={data} margin={{
+        top: 10,
+        right: 10,
+        left: 40,
+        bottom: 0,
+      }}>
+        <CartesianGrid strokeDasharray="3 3"/>
+        <YAxis scale="auto"/>
+        <Tooltip content={<CustomTooltip/>} />
+        <Bar dataKey="value.processed" stroke="gray" fill="gray" opacity={1}
+              isAnimationActive={false}/>
+        <Bar dataKey="value.confirmed" stroke="yellow" fill="yellow" opacity={1}
+              isAnimationActive={false}/>
+        <Bar dataKey="value.finalized" stroke="green" fill="green" opacity={1}
+              isAnimationActive={false}/>
+      </ComposedChart>
+    </ResponsiveContainer>
+  </div>;
+}
 export const ExampleAreaTwo = () => {
 
   const slots2 = useWebSocketStore(state => state.slots2);
@@ -538,6 +600,75 @@ export const ExampleAreaTwo = () => {
     </ResponsiveContainer>
   </div>;
 }
+export const ExampleAreaTwoBar = () => {
+
+  const slots2 = useWebSocketStore(state => state.slots2);
+  // const disconnect = useWebSocketStore(state => state.disconnect)
+  // const connect = useWebSocketStore(state => state.connect)
+
+  const [type, _setType] = useState<CurveType>('monotone');
+
+
+
+  const data = useMemo(() => {
+    const entries = Object.entries(slots2);
+    const packedData = entries.reduce<PlotInfo[]>((acc, [_groupIdx, slots]) => {
+      const chunk = slots.map(elt => {
+        const obj = {
+          x: elt.slot,
+          y: elt.totalFee,
+          commitment: elt.commitment,
+          value: {
+            confirmed: null,
+            finalized: null,
+            processed: null,
+          },
+        } satisfies PlotInfo
+        // Я хз чего он ругается, но заглушим
+        obj.value[elt.commitment] = obj.y as unknown as null;
+        return obj;
+      })
+      const sorted = chunk.sort((a, b) => a.x - b.x)
+      acc.push(...sorted)
+      return acc
+    }, [])
+    // Второй раз пробегаемся, закрываем дырки, если статусы разные
+    return packedData
+  }, [slots2])
+  return <div style={{
+    width: '100%',
+  }}>
+    <ResponsiveContainer width="100%" height={200}>
+      <ComposedChart width={500} height={200} data={data} margin={{
+        top: 10,
+        right: 10,
+        left: 40,
+        bottom: 0,
+      }}>
+        <CartesianGrid strokeDasharray="3 3"/>
+        <YAxis scale="auto"/>
+        <Tooltip content={<CustomTooltip/>} />
+        <Bar dataKey="value.processed" stroke="gray" fill="gray" opacity={1}
+              isAnimationActive={false}/>
+        <Bar dataKey="value.confirmed" stroke="yellow" fill="yellow" opacity={1}
+              isAnimationActive={false}/>
+        <Bar dataKey="value.finalized" stroke="green" fill="green" opacity={1}
+              isAnimationActive={false}/>
+      </ComposedChart>
+    </ResponsiveContainer>
+  </div>;
+}
+// Черновики для тестов как тултипы в графиках будут себя вести
+function simpleFormatter(value:string, name:string):[string, string] {
+  let formattedValue = value;
+  let formattedName = name;
+
+  if (name === 'y') {
+    formattedName = `Average fee`;
+  }
+
+  return [formattedValue, formattedName];
+}
 export const ExampleAreaThree = () => {
 
   const slots2 = useWebSocketStore(state => state.slots2);
@@ -580,7 +711,13 @@ export const ExampleAreaThree = () => {
       }}>
         <CartesianGrid strokeDasharray="3 3"/>
         <YAxis scale="sqrt"/>
-        <Tooltip />
+        <Tooltip labelFormatter={(label, payload) => {
+          if(payload[0]) {
+          const slot = payload[0].payload.x
+          return 'Slot: ' + slot.toLocaleString('en-US')
+        }
+          return label;
+        }} formatter={simpleFormatter}/>
         <Line type={type} dataKey="y" stroke="gray" fill="gray" opacity={0.5}
               dot={false}
               isAnimationActive={false}/>
