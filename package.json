@@ -16,10 +16,9 @@
   "license": "MIT",
   "version": "1.0.0",
   "type": "module",
-  "homepage": "https://solana-stream-solutions.github.io/solfees-fe-ci-test",
   "scripts": {
     "predeploy": "pnpm run build",
-    "deploy": "gh-pages -d dist",
+    "deploy": "gh-pages -d dist --cname solfees.io",
     "format": "prettier src/**/*.{ts,tsx} --write",
     "lint": "eslint --max-warnings 0",
     "lint:fix": "eslint --max-warnings 0 --fix",
