@@ -57,12 +57,18 @@ export const useWebSocketStore = create<WebSocketState>((set) => ({
     set({percents})
   },
   updateReadonlyKeys: (readonlyKeys) => {
-    if(JSON.stringify(readonlyKeys) === JSON.stringify([""])) return;
+    if(JSON.stringify(readonlyKeys) === JSON.stringify([""])) {
+      set({readonlyKeys: []})
+      return;
+    }
     set({readonlyKeys})
   },
   updateReadwriteKeys: (readwriteKeys) => {
     // сюда еще проверку валидности ключа надо положить, пока обработал корнеркейсы
-    if(JSON.stringify(readwriteKeys) === JSON.stringify([""])) return;
+    if(JSON.stringify(readwriteKeys) === JSON.stringify([""])) {
+      set({readwriteKeys: []})
+      return;
+    }
     set({readwriteKeys})
   },
   updateSubscription: () => {

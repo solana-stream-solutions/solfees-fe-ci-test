@@ -41,7 +41,7 @@ export const ModalFee = ({
   }, [editedFeeIdx, isVisible])
   const onClickButton = () => {
     const newPercents = fees.map((elt, idx) => {
-      if (idx === editedFeeIdx) return +(+feeValue * 100).toFixed(2);
+      if (idx === editedFeeIdx) return +(+feeValue * 100).toFixed(2)|0;
       return elt;
     })
     updatePercents(newPercents)

@@ -17,7 +17,9 @@ import {Epoch} from "../components/ui/Epoch.tsx";
 import {HeaderDataCell} from "@consta/table/HeaderDataCell";
 import {SimpleCell} from "../components/ui/SimpleCell.tsx";
 import {useNavigate} from "@tanstack/react-router";
-import {Area, Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, YAxis} from 'recharts';
+import {
+  Area, Bar, CartesianGrid, ComposedChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from 'recharts';
 import {IconFeed} from "../components/ui/IconFeed.tsx";
 import {ModalFilter} from "../components/ui/ModalFilter.tsx";
 import {percentFromStore} from "../common/utils.ts";
@@ -25,6 +27,8 @@ import {ModalFee} from "../components/ui/ModalFee.tsx";
 import {CurveType} from "recharts/types/shape/Curve";
 import {ContentType} from "recharts/types/component/Tooltip";
 import {Footer} from "../components/layout/Footer.tsx";
+import {SwitchGroup} from "@consta/uikit/SwitchGroup";
+import {Switch} from "@consta/uikit/Switch";
 
 
 const ButtonWithTooltip = withTooltip({content: 'Тултип сверху'})(Button);
@@ -34,8 +38,9 @@ const InfoButton = (props: TooltipProps): ReactNode => {
                             tooltipProps={props}/>
 }
 
-
-function buildTransactions(slots: SlotContent[]) {
+function buildTransactions(slots: SlotContent[], withFiltered = false) {
+  const zero = slots.map(elt => elt.totalTransactionsFiltered)
+  const maxZero = `${Math.max(...zero)}`.length
   const first = slots.map(elt => elt.totalTransactions - elt.totalTransactionsVote)
   const maxFirst = `${Math.max(...first)}`.length
   const second = slots.map(elt => elt.totalTransactions)
@@ -43,7 +48,12 @@ function buildTransactions(slots: SlotContent[]) {
   const aligned = slots.map((_, idx) => {
     const colOne = `${first[idx]}`.padStart(maxFirst, ' ');
     const colSecond = `${second[idx]}`.padStart(maxSecond, ' ');
-    return colOne + ' / ' + colSecond
+    let colFiltered = ''
+    if(withFiltered) {
+      colFiltered = `${zero[idx]}`.padStart(maxZero, ' ');
+      colFiltered += ' / '
+    }
+    return colFiltered + colOne + ' / ' + colSecond
   })
   return aligned
 }
@@ -69,6 +79,11 @@ const CustomTable = ({
   const memoFee1 = useCallback(() => onEditFee(1), [onEditFee])
   const memoFee2 = useCallback(() => onEditFee(2), [onEditFee])
 
+  const isTransactionsApplied = useMemo(() => {
+    return !!readwriteKeys.length || !!readonlyKeys.length
+  }, [readwriteKeys.length, readonlyKeys.length])
+
+
   const rowsFromSocket2 = useMemo(() => {
     const unsorted = slots2 as Record<string, SlotContent[]>
     const result = Object.entries(unsorted).sort((a, b) => Number(a[0]) - Number(b[0])).map(([id, slots]) => {
@@ -80,7 +95,7 @@ const CustomTable = ({
           commitment: elt.commitment,
           slot: elt.slot,
         })),
-        transactions: buildTransactions(slots),
+        transactions: buildTransactions(slots, isTransactionsApplied),
         computeUnits: slots.map(elt => ({
           amount: elt.totalUnitsConsumed.toLocaleString('en-US', {
             minimumFractionDigits: 2,
@@ -88,7 +103,10 @@ const CustomTable = ({
           }),
           percent: (elt.totalUnitsConsumed / 48_000_000 * 100).toFixed(2),
         })),
-        earnedSol: slots.map(elt => elt.totalFee),
+        earnedSol: slots.map(elt => {
+          const value = elt.totalFee/1e9;
+          return value > 1 ? value.toLocaleString('unknown', {maximumFractionDigits:9 , minimumFractionDigits: 9}).replace(/\s/g, '') : value.toFixed(9)
+        }),
         averageFee: slots.map(elt => elt.feeAverage.toLocaleString('en-US', {maximumFractionDigits: 2})),
         fee0: slots.map(elt => (elt.feeLevels[0] || 0).toLocaleString('en-US', {maximumFractionDigits: 2})),
         fee1: slots.map(elt => (elt.feeLevels[1] || 0).toLocaleString('en-US', {maximumFractionDigits: 2})),
@@ -98,9 +116,6 @@ const CustomTable = ({
     return [...result].reverse();
   }, [slots2])
 
-  const isTransactionsApplied = useMemo(() => {
-    return !!readwriteKeys.length || !!readonlyKeys.length
-  }, [readwriteKeys.length, readonlyKeys.length])
   const columns: TableColumn<typeof rowsFromSocket2[number]>[] = useMemo(() => {
     return [
       {
@@ -289,29 +304,54 @@ const CustomTable = ({
 }
 
 
+type Item = {
+  key: number;
+  value: string;
+};
+
+const items: Item[] = [
+  {
+    key: 0,
+    value: 'fee0',
+  }, {
+    key: 1,
+    value: 'fee1',
+  }, {
+    key: 2,
+    value: 'fee2',
+  },
+];
 const PlotLayer = () => {
-  const [isArea, areaControls] = useFlag(true)
+  const [isAreaOne, areaControlsOne] = useFlag(true)
+  const [isAreaTwo, areaControlsTwo] = useFlag(true)
+  const [value, setValue] = useState<Item[] | null>(null);
+  const percents = useWebSocketStore(state => state.percents)
+  const getItemLabel = (arg: Item): string => 'p' + ((percents[arg.key] || 0) / 100).toLocaleString('en-US', {maximumFractionDigits: 2})
+
   return <>
-    <Button label="Change Plot type" onClick={areaControls.toggle}/>
     <div className="flex flex-nowrap gap-4 w-full">
       <div className="w-full">
-        <h1 className="text-xl mb-8">Compute units</h1>
-        {isArea ? <ExampleAreaOne/> : <ExampleAreaOneBar/>}
+        <Switch label="Bars plot" checked={isAreaOne} onChange={areaControlsOne.toggle}/>
+        {!isAreaOne ? <ExampleAreaOne/> : <ExampleAreaOneBar/>}
       </div>
       <div className="w-full">
-        <h1 className="text-xl mb-8">Earned SOL</h1>
-        {isArea ? <ExampleAreaTwo/> : <ExampleAreaTwoBar/>}
-
+        <Switch label="Bars plot" checked={isAreaTwo} onChange={areaControlsTwo.toggle}/>
+        {!isAreaTwo ? <ExampleAreaTwo/> : <ExampleAreaTwoBar/>}
       </div>
       <div className="w-full">
-        <h1 className="text-xl mb-8">Fees</h1>
-        <ExampleAreaThree/>
+        <SwitchGroup
+          value={value}
+          items={items}
+          getItemLabel={getItemLabel}
+          onChange={(arg) => setValue(arg as (Item[] | null))}
+          direction="row"
+          name="FeesControls"/>
+        <ExampleAreaThree items={(value || []).map(elt => elt.value)}/>
       </div>
 
     </div>
   </>
 }
-
 
 
 export const HomeNew = (): FunctionComponent => {
@@ -346,6 +386,45 @@ export const HomeNew = (): FunctionComponent => {
 }
 
 
+function nFormatter(num: number, digits = 0): string {
+  const lookup = [
+    {
+      value: 1,
+      symbol: "",
+    }, {
+      value: 1e3,
+      symbol: "k",
+    }, {
+      value: 1e6,
+      symbol: "M",
+    }, {
+      value: 1e9,
+      symbol: "G",
+    }, {
+      value: 1e12,
+      symbol: "T",
+    }, {
+      value: 1e15,
+      symbol: "P",
+    }, {
+      value: 1e18,
+      symbol: "E",
+    },
+  ];
+  const regexp = /\.0+$|(?<=\.[0-9]*[1-9])0+$/;
+  const item = lookup.slice().reverse().find(item => num >= item.value);
+  return item ? (num / item.value).toFixed(digits).replace(regexp, "").concat(item.symbol) : "0";
+}
+
+function tickFormatter(value: number, _index: number): string {
+  return nFormatter(value)
+}
+function tickFormatter2(value: number, _index: number): string {
+  const newValue = value / 1e9;
+  return newValue.toFixed(2)
+}
+
+
 const CustomTooltip: ContentType<any, any> = ({
                                                 active,
                                                 payload,
@@ -360,6 +439,45 @@ const CustomTooltip: ContentType<any, any> = ({
             <span className="recharts-tooltip-item-name">Tracked Items</span>
             <span className="recharts-tooltip-item-separator"> : </span>
             <span className="recharts-tooltip-item-value">{elt.y.toLocaleString('en-US')}</span>
+          </li>
+          <li className="recharts-tooltip-item">
+            <span className="recharts-tooltip-item-name">DEBUG processed</span>
+            <span className="recharts-tooltip-item-separator"> : </span>
+            <span className="recharts-tooltip-item-value">{elt.value.processed}</span>
+          </li>
+          <li className="recharts-tooltip-item">
+            <span className="recharts-tooltip-item-name">DEBUG confirmed</span>
+            <span className="recharts-tooltip-item-separator"> : </span>
+            <span className="recharts-tooltip-item-value">{elt.value.confirmed}</span>
+          </li>
+          <li className="recharts-tooltip-item">
+            <span className="recharts-tooltip-item-name">DEBUG finalized</span>
+            <span className="recharts-tooltip-item-separator"> : </span>
+            <span className="recharts-tooltip-item-value">{elt.value.finalized}</span>
+          </li>
+        </ul>
+      </div>
+    }
+  }
+
+  return null;
+};
+const CustomTooltip2: ContentType<any, any> = ({
+                                                active,
+                                                payload,
+                                              }) => {
+  if (active && payload && payload.length) {
+    if (payload[0]) {
+      const elt = payload[0].payload;
+      const value = elt.y/1e9;
+      const valueInTooltip = value > 1 ? value.toLocaleString('unknown', {maximumFractionDigits:9 , minimumFractionDigits: 9}).replace(/\s/g, '') : value.toFixed(9)
+      return <div className="recharts-default-tooltip">
+        <p className="recharts-tooltip-label">Slot: {elt.x.toLocaleString('en-US')} ({elt.commitment})</p>
+        <ul className="recharts-tooltip-item-list">
+          <li className="recharts-tooltip-item">
+            <span className="recharts-tooltip-item-name">Earned</span>
+            <span className="recharts-tooltip-item-separator"> : </span>
+            <span className="recharts-tooltip-item-value">{valueInTooltip}</span>
           </li>
           <li className="recharts-tooltip-item">
             <span className="recharts-tooltip-item-name">DEBUG processed</span>
@@ -453,14 +571,16 @@ export const ExampleAreaOne = () => {
     width: '100%',
   }}>
     <ResponsiveContainer width="100%" height={200}>
-      <ComposedChart width={500} height={200} data={data} margin={{
-        top: 10,
-        right: 10,
-        left: 40,
+      <ComposedChart data={data} margin={{
+        top: 0,
+        right: 0,
+        left: 0,
         bottom: 0,
       }}>
         <CartesianGrid strokeDasharray="3 3" vertical={false}/>
-        <YAxis scale="auto"/>
+        <YAxis scale="auto" tickFormatter={tickFormatter}/>
+        <XAxis label="Compute Units" orientation={'top'} tick={false} axisLine={false}/>
+        <ReferenceLine y="48000000" stroke="red"/>
         <Tooltip content={<CustomTooltip/>}/>
         <Area type={type} dataKey="value.processed" stroke="gray" fill="gray" opacity={1}
               isAnimationActive={false}/>
@@ -509,14 +629,16 @@ export const ExampleAreaOneBar = () => {
     width: '100%',
   }}>
     <ResponsiveContainer width="100%" height={200}>
-      <ComposedChart width={500} height={200} data={data} margin={{
-        top: 10,
-        right: 10,
-        left: 40,
+      <ComposedChart data={data} margin={{
+        top: 0,
+        right: 0,
+        left: 0,
         bottom: 0,
       }}>
         <CartesianGrid strokeDasharray="3 3" vertical={false}/>
-        <YAxis scale="auto"/>
+        <YAxis scale="auto" tickFormatter={tickFormatter}/>
+        <XAxis label="Compute Units" orientation={'top'} tick={false} axisLine={false}/>
+        <ReferenceLine y="48000000" stroke="red"/>
         <Tooltip content={<CustomTooltip/>}/>
         <Bar dataKey="value.processed" stroke="gray" fill="gray" opacity={1}
              isAnimationActive={false}/>
@@ -528,6 +650,8 @@ export const ExampleAreaOneBar = () => {
     </ResponsiveContainer>
   </div>;
 }
+
+
 export const ExampleAreaTwo = () => {
 
   const slots2 = useWebSocketStore(state => state.slots2);
@@ -583,15 +707,16 @@ export const ExampleAreaTwo = () => {
     width: '100%',
   }}>
     <ResponsiveContainer width="100%" height={200}>
-      <ComposedChart width={500} height={200} data={data} margin={{
+      <ComposedChart data={data} margin={{
         top: 10,
         right: 10,
         left: 40,
         bottom: 0,
       }}>
         <CartesianGrid strokeDasharray="3 3" vertical={false}/>
-        <YAxis scale="auto"/>
-        <Tooltip content={<CustomTooltip/>}/>
+        <YAxis scale="auto" tickFormatter={tickFormatter2}/>
+        <XAxis label="Earned SOL" orientation={'top'} tick={false} axisLine={false}/>
+        <Tooltip content={<CustomTooltip2/>}/>
         <Area type={type} dataKey="value.processed" stroke="gray" fill="gray" opacity={1}
               isAnimationActive={false}/>
         <Area type={type} dataKey="value.confirmed" stroke="yellow" fill="yellow" opacity={1}
@@ -640,15 +765,16 @@ export const ExampleAreaTwoBar = () => {
     width: '100%',
   }}>
     <ResponsiveContainer width="100%" height={200}>
-      <ComposedChart width={500} height={200} data={data} margin={{
+      <ComposedChart data={data} margin={{
         top: 10,
         right: 10,
         left: 40,
         bottom: 0,
       }}>
         <CartesianGrid strokeDasharray="3 3" vertical={false}/>
-        <YAxis scale="auto"/>
-        <Tooltip content={<CustomTooltip/>}/>
+        <YAxis scale="auto" tickFormatter={tickFormatter2}/>
+        <XAxis label="Earned SOL" orientation={'top'} tick={false} axisLine={false}/>
+        <Tooltip content={<CustomTooltip2/>}/>
         <Bar dataKey="value.processed" stroke="gray" fill="gray" opacity={1}
              isAnimationActive={false}/>
         <Bar dataKey="value.confirmed" stroke="yellow" fill="yellow" opacity={1}
@@ -675,7 +801,20 @@ function simpleFormatter(value: string, name: string): [string, string] {
   return [formattedValue, formattedName];
 }
 
-export const ExampleAreaThree = () => {
+interface PropsAreaThree {
+  items: string[]
+}
+
+function getColor(arg: string): string {
+  const areaColors: Record<string, string> = {
+    fee0: 'red',
+    fee1: 'green',
+    fee2: 'blue',
+  }
+  return areaColors[arg] || 'gray'
+}
+
+export const ExampleAreaThree = ({items}: PropsAreaThree) => {
 
   const slots2 = useWebSocketStore(state => state.slots2);
   // const disconnect = useWebSocketStore(state => state.disconnect)
@@ -708,7 +847,7 @@ export const ExampleAreaThree = () => {
     width: '100%',
   }}>
     <ResponsiveContainer width="100%" height={200}>
-      <ComposedChart width={500} height={200} data={data} margin={{
+      <ComposedChart data={data} margin={{
         top: 10,
         right: 10,
         left: 40,
@@ -716,6 +855,7 @@ export const ExampleAreaThree = () => {
       }}>
         <CartesianGrid strokeDasharray="3 3" vertical={false}/>
         <YAxis scale="sqrt"/>
+        <XAxis label="Fees" orientation={'top'} tick={false} axisLine={false}/>
         <Tooltip labelFormatter={(label, payload) => {
           if (payload[0]) {
             const slot = payload[0].payload.x
@@ -723,15 +863,11 @@ export const ExampleAreaThree = () => {
           }
           return label;
         }} formatter={simpleFormatter}/>
-        <Line type={type} dataKey="y" stroke="gray" fill="gray" opacity={0.5}
+        <Area type={type} dataKey="y" stroke="gray" fill="gray" opacity={0.7}
               dot={false}
               isAnimationActive={false}/>
-        <Area type={type} dataKey="fee0" stroke="blue" fill="blue" opacity={0.5}
-              isAnimationActive={false}/>
-        <Area type={type} dataKey="fee1" stroke="green" fill="green" opacity={0.3}
-              isAnimationActive={false}/>
-        <Area type={type} dataKey="fee2" stroke="red" fill="red" opacity={0.4}
-              isAnimationActive={false}/>
+        {items.map(elt => <Area type={type} dataKey={elt} stroke={getColor(elt)} fill={getColor(elt)} opacity={0.99}
+                                isAnimationActive={false}/>)}
       </ComposedChart>
     </ResponsiveContainer>
   </div>;
