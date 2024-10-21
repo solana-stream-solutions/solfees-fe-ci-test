@@ -22,10 +22,9 @@ import {IconFeed} from "../components/ui/IconFeed.tsx";
 import {ModalFilter} from "../components/ui/ModalFilter.tsx";
 import {percentFromStore} from "../common/utils.ts";
 import {ModalFee} from "../components/ui/ModalFee.tsx";
-import {mockedSlots} from "../features/mockedSlots.ts";
 import {CurveType} from "recharts/types/shape/Curve";
 import {ContentType} from "recharts/types/component/Tooltip";
-import {Payload} from "recharts/types/component/DefaultTooltipContent";
+import {Footer} from "../components/layout/Footer.tsx";
 
 
 const ButtonWithTooltip = withTooltip({content: 'Тултип сверху'})(Button);
@@ -83,14 +82,17 @@ const CustomTable = ({
         })),
         transactions: buildTransactions(slots),
         computeUnits: slots.map(elt => ({
-          amount: elt.totalUnitsConsumed.toLocaleString('en-US'),
+          amount: elt.totalUnitsConsumed.toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          }),
           percent: (elt.totalUnitsConsumed / 48_000_000 * 100).toFixed(2),
         })),
         earnedSol: slots.map(elt => elt.totalFee),
-        averageFee: slots.map(elt => elt.feeAverage.toFixed(2)),
-        fee0: slots.map(elt => elt.feeLevels[0] || 0),
-        fee1: slots.map(elt => elt.feeLevels[1] || 0),
-        fee2: slots.map(elt => elt.feeLevels[2] || 0),
+        averageFee: slots.map(elt => elt.feeAverage.toLocaleString('en-US', {maximumFractionDigits: 2})),
+        fee0: slots.map(elt => (elt.feeLevels[0] || 0).toLocaleString('en-US', {maximumFractionDigits: 2})),
+        fee1: slots.map(elt => (elt.feeLevels[1] || 0).toLocaleString('en-US', {maximumFractionDigits: 2})),
+        fee2: slots.map(elt => (elt.feeLevels[2] || 0).toLocaleString('en-US', {maximumFractionDigits: 2})),
       }
     })
     return [...result].reverse();
@@ -104,7 +106,7 @@ const CustomTable = ({
       {
         title: 'Validator',
         accessor: 'leader',
-        minWidth: 490,
+        minWidth: 150,
         renderCell: ({row}) => <Validator leader={row.leader}/>,
       }, {
         width: 'auto',
@@ -131,7 +133,7 @@ const CustomTable = ({
       }, {
         title: 'Compute Units',
         width: 'auto',
-        minWidth: 190,
+        minWidth: 216,
         accessor: 'computeUnits',
         renderHeaderCell: ({title}) => <HeaderDataCell
           controlRight={[
@@ -276,7 +278,7 @@ const CustomTable = ({
 
 
   if (!rowsFromSocket2.length) return <span
-    className="w-full text-center text-xl font-bold">Loading...</span>
+    className="w-full h-full text-center text-xl font-bold">Loading...</span>
 
   return <div className="w-full h-full overflow-x-auto">
     <Table className="overflow-scroll" columns={columns} rows={deferredValue}
@@ -310,6 +312,8 @@ const PlotLayer = () => {
   </>
 }
 
+
+
 export const HomeNew = (): FunctionComponent => {
   const [filterModalShown, filterModalControls] = useFlag(false)
   const [editedFeeIdx, setEditedFeeIdx] = useState(-1)
@@ -320,7 +324,7 @@ export const HomeNew = (): FunctionComponent => {
     <button className="absolute top-2 left-2 rounded bg-amber-300" onClick={() => navigate({to: '/homeOld'})}>click to
       view Table from @consta\uikit (old)
     </button>
-    <div className="px-20 py-5 bg-white w-full flex-col justify-start items-start gap-8 inline-flex h-[100vh]">
+    <div className="px-20 py-5 bg-white w-full flex-col justify-start items-start gap-8 inline-flex h-[100vh] relative">
       <div className="self-stretch justify-between items-center inline-flex">
         <div className="justify-start items-center gap-2 flex">
           <IconFeed className="w-5 h-5 relative"></IconFeed>
@@ -332,19 +336,20 @@ export const HomeNew = (): FunctionComponent => {
         </div>
         <Epoch/>
       </div>
-      <PlotLayer />
+      <PlotLayer/>
       <CustomTable onEditFee={setEditedFeeIdx} onEditKeys={filterModalControls.on}/>
       <ModalFee editedFeeIdx={editedFeeIdx} isVisible={editedFeeIdx >= 0} onClose={() => setEditedFeeIdx(-1)}/>
       <ModalFilter isVisible={filterModalShown} onClose={filterModalControls.off}/>
+      <Footer/>
     </div>
   </>);
 }
 
 
 const CustomTooltip: ContentType<any, any> = ({
-                         active,
-                         payload,
-                       }) => {
+                                                active,
+                                                payload,
+                                              }) => {
   if (active && payload && payload.length) {
     if (payload[0]) {
       const elt = payload[0].payload;
@@ -389,9 +394,9 @@ type FeesInfo = {
   x: number;
   commitment: CommitmentStatus;
   y: number;
-  fee0: number|null;
-  fee1: number|null;
-  fee2: number|null;
+  fee0: number | null;
+  fee1: number | null;
+  fee2: number | null;
 }
 export const ExampleAreaOne = () => {
 
@@ -400,7 +405,6 @@ export const ExampleAreaOne = () => {
   // const connect = useWebSocketStore(state => state.connect)
 
   const [type, _setType] = useState<CurveType>('monotone');
-
 
 
   const data = useMemo(() => {
@@ -429,13 +433,13 @@ export const ExampleAreaOne = () => {
     const filledGapsData = packedData.map((elt, idx, arr) => {
       const prevPrev = arr[idx - 2];
       const prev = arr[idx - 1]
-      if(prev) {
-        if(prev.commitment !== elt.commitment) {
+      if (prev) {
+        if (prev.commitment !== elt.commitment) {
           prev.value[elt.commitment] = prev.y
         }
         // Corner Case ситуации A A A B A A
-        if(prevPrev) {
-          if(prev.commitment !== elt.commitment && prevPrev.commitment === elt.commitment) {
+        if (prevPrev) {
+          if (prev.commitment !== elt.commitment && prevPrev.commitment === elt.commitment) {
             elt.value[prev.commitment] = elt.y;
             prev.value[prevPrev.commitment] = null;
           }
@@ -455,9 +459,9 @@ export const ExampleAreaOne = () => {
         left: 40,
         bottom: 0,
       }}>
-        <CartesianGrid strokeDasharray="3 3"/>
+        <CartesianGrid strokeDasharray="3 3" vertical={false}/>
         <YAxis scale="auto"/>
-        <Tooltip content={<CustomTooltip/>} />
+        <Tooltip content={<CustomTooltip/>}/>
         <Area type={type} dataKey="value.processed" stroke="gray" fill="gray" opacity={1}
               isAnimationActive={false}/>
         <Area type={type} dataKey="value.confirmed" stroke="yellow" fill="yellow" opacity={1}
@@ -477,7 +481,6 @@ export const ExampleAreaOneBar = () => {
   const [_type, _setType] = useState<CurveType>('monotone');
 
 
-
   const data = useMemo(() => {
     const entries = Object.entries(slots2);
     const packedData = entries.reduce<PlotInfo[]>((acc, [_groupIdx, slots]) => {
@@ -512,15 +515,15 @@ export const ExampleAreaOneBar = () => {
         left: 40,
         bottom: 0,
       }}>
-        <CartesianGrid strokeDasharray="3 3"/>
+        <CartesianGrid strokeDasharray="3 3" vertical={false}/>
         <YAxis scale="auto"/>
-        <Tooltip content={<CustomTooltip/>} />
+        <Tooltip content={<CustomTooltip/>}/>
         <Bar dataKey="value.processed" stroke="gray" fill="gray" opacity={1}
-              isAnimationActive={false}/>
+             isAnimationActive={false}/>
         <Bar dataKey="value.confirmed" stroke="yellow" fill="yellow" opacity={1}
-              isAnimationActive={false}/>
+             isAnimationActive={false}/>
         <Bar dataKey="value.finalized" stroke="green" fill="green" opacity={1}
-              isAnimationActive={false}/>
+             isAnimationActive={false}/>
       </ComposedChart>
     </ResponsiveContainer>
   </div>;
@@ -532,7 +535,6 @@ export const ExampleAreaTwo = () => {
   // const connect = useWebSocketStore(state => state.connect)
 
   const [type, _setType] = useState<CurveType>('monotone');
-
 
 
   const data = useMemo(() => {
@@ -561,13 +563,13 @@ export const ExampleAreaTwo = () => {
     const filledGapsData = packedData.map((elt, idx, arr) => {
       const prevPrev = arr[idx - 2];
       const prev = arr[idx - 1]
-      if(prev) {
-        if(prev.commitment !== elt.commitment) {
+      if (prev) {
+        if (prev.commitment !== elt.commitment) {
           prev.value[elt.commitment] = prev.y
         }
         // Corner Case ситуации A A A B A A
-        if(prevPrev) {
-          if(prev.commitment !== elt.commitment && prevPrev.commitment === elt.commitment) {
+        if (prevPrev) {
+          if (prev.commitment !== elt.commitment && prevPrev.commitment === elt.commitment) {
             elt.value[prev.commitment] = elt.y;
             prev.value[prevPrev.commitment] = null;
           }
@@ -587,9 +589,9 @@ export const ExampleAreaTwo = () => {
         left: 40,
         bottom: 0,
       }}>
-        <CartesianGrid strokeDasharray="3 3"/>
+        <CartesianGrid strokeDasharray="3 3" vertical={false}/>
         <YAxis scale="auto"/>
-        <Tooltip content={<CustomTooltip/>} />
+        <Tooltip content={<CustomTooltip/>}/>
         <Area type={type} dataKey="value.processed" stroke="gray" fill="gray" opacity={1}
               isAnimationActive={false}/>
         <Area type={type} dataKey="value.confirmed" stroke="yellow" fill="yellow" opacity={1}
@@ -607,7 +609,6 @@ export const ExampleAreaTwoBar = () => {
   // const connect = useWebSocketStore(state => state.connect)
 
   const [type, _setType] = useState<CurveType>('monotone');
-
 
 
   const data = useMemo(() => {
@@ -645,23 +646,27 @@ export const ExampleAreaTwoBar = () => {
         left: 40,
         bottom: 0,
       }}>
-        <CartesianGrid strokeDasharray="3 3"/>
+        <CartesianGrid strokeDasharray="3 3" vertical={false}/>
         <YAxis scale="auto"/>
-        <Tooltip content={<CustomTooltip/>} />
+        <Tooltip content={<CustomTooltip/>}/>
         <Bar dataKey="value.processed" stroke="gray" fill="gray" opacity={1}
-              isAnimationActive={false}/>
+             isAnimationActive={false}/>
         <Bar dataKey="value.confirmed" stroke="yellow" fill="yellow" opacity={1}
-              isAnimationActive={false}/>
+             isAnimationActive={false}/>
         <Bar dataKey="value.finalized" stroke="green" fill="green" opacity={1}
-              isAnimationActive={false}/>
+             isAnimationActive={false}/>
       </ComposedChart>
     </ResponsiveContainer>
   </div>;
 }
+
 // Черновики для тестов как тултипы в графиках будут себя вести
-function simpleFormatter(value:string, name:string):[string, string] {
+function simpleFormatter(value: string, name: string): [string, string] {
   let formattedValue = value;
   let formattedName = name;
+
+  const newValue = (+value).toLocaleString('en-US', {maximumFractionDigits: 2})
+  if (!Number.isNaN(+value)) formattedValue = newValue
 
   if (name === 'y') {
     formattedName = `Average fee`;
@@ -669,6 +674,7 @@ function simpleFormatter(value:string, name:string):[string, string] {
 
   return [formattedValue, formattedName];
 }
+
 export const ExampleAreaThree = () => {
 
   const slots2 = useWebSocketStore(state => state.slots2);
@@ -676,7 +682,6 @@ export const ExampleAreaThree = () => {
   // const connect = useWebSocketStore(state => state.connect)
 
   const [type, _setType] = useState<CurveType>('monotone');
-
 
 
   const data = useMemo(() => {
@@ -709,13 +714,13 @@ export const ExampleAreaThree = () => {
         left: 40,
         bottom: 0,
       }}>
-        <CartesianGrid strokeDasharray="3 3"/>
+        <CartesianGrid strokeDasharray="3 3" vertical={false}/>
         <YAxis scale="sqrt"/>
         <Tooltip labelFormatter={(label, payload) => {
-          if(payload[0]) {
-          const slot = payload[0].payload.x
-          return 'Slot: ' + slot.toLocaleString('en-US')
-        }
+          if (payload[0]) {
+            const slot = payload[0].payload.x
+            return 'Slot: ' + slot.toLocaleString('en-US')
+          }
           return label;
         }} formatter={simpleFormatter}/>
         <Line type={type} dataKey="y" stroke="gray" fill="gray" opacity={0.5}

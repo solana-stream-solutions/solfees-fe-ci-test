@@ -7,7 +7,7 @@ export const Validator = ({leader}: Props) => {
         <h1 className="font-bold">Validator Name:</h1>
         <a className="hover:underline"
            href={`https://www.validators.app/validators/${leader}?locale=en&network=mainnet`} target="_blank">
-        {leader}
+        {leader.slice(0,5)}…{leader.slice(-4)}
         </a>
       </div>
 }
