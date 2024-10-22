@@ -6,6 +6,9 @@ import {IconAllDone} from "@consta/icons/IconAllDone";
 import {AnimateIconBase} from "@consta/icons/AnimateIconBase";
 import {MouseEventHandler, ReactNode, useEffect, useRef, useState} from "react";
 import {IconCopy} from "@consta/icons/IconCopy";
+import {IconWarning} from "@consta/icons/IconWarning";
+import {IconProcessing} from "@consta/icons/IconProcessing";
+import {IconWatchStroked} from "@consta/icons/IconWatchStroked";
 
 
 interface Props {
@@ -20,9 +23,9 @@ type ComProps = {
 }
 
 
-const statuses: CommitmentStatus[] = ['processed', 'confirmed', 'finalized']
-const colors: IconPropView[] = ['ghost', 'primary', 'success']
-const icons = [IconRoute, IconCheck, IconAllDone]
+const statuses: (CommitmentStatus|'fake')[] = ['processed', 'confirmed', 'finalized', "fake"]
+const colors: IconPropView[] = ['link', 'primary', 'success', 'ghost']
+const icons = [IconProcessing, IconCheck, IconAllDone, IconWatchStroked]
 export const AnimateIconBaseIcons = ({value}: ComProps) => {
   const idx = statuses.findIndex(elt => elt === value)
   return (<AnimateIconBase

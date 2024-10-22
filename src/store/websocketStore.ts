@@ -33,6 +33,7 @@ interface WebSocketState {
   updatePercents: (arg: number[]) => void;
   updateReadonlyKeys: (arg: string[]) => void;
   updateReadwriteKeys: (arg: string[]) => void;
+  suspendQueue: (arg: boolean) => void;
 }
 
 interface ServerAnswerFees {
@@ -49,6 +50,15 @@ interface ServerAnswerFees {
 export const useWebSocketStore = create<WebSocketState>((set, get: () => WebSocketState) => {
   const queue: MessageEvent[] = [];
   let lastProcessedTime = Date.now();
+  let isLocked = false
+
+  setInterval(() => {
+    if(isLocked) return;
+    const lastCommitDuration = Date.now() - lastProcessedTime
+    if(lastCommitDuration > 5_000) {
+      /* TODO: здесь надо сделать reconnect */
+    }
+  }, 5000)
 
   function routeMessages(target: 'queue' | 'store'): void {
     const socket = get().socket
@@ -74,20 +84,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get: () => WebSock
                 const sameIdx = arr.findIndex(sameElt => sameElt.slot === elt.slot)
                 return sameIdx === idx
               });
-              if(slots2[groupIdx].length !== 4) {
-                const slots = slots2[groupIdx]
-                const isFirst = slots.find(elt => elt.slot / 4 % 1 === 0)
-                const isSecond = slots.find(elt => elt.slot / 4 % 1 === 0.25)
-                const isThird = slots.find(elt => elt.slot / 4 % 1 === 0.5)
-                const isFourth = slots.find(elt => elt.slot / 4 % 1 === 0.75)
-                // Знаем какого элемента нет, можем его фейково добавить
-                // TODO глючит сильно, надо перерабатывать commitment чтобы был статус LOST и по нему уже делать. Сейчас есть проблемы
-                // const fakeLeader = 'FAKE_LEADER'
-                // if(!isFirst) slots2[groupIdx].push({isFake: true, slot: groupIdx*4+0, totalTransactionsFiltered: 0, feeLevels: [0,0,0], feeAverage: 0, commitment:'fake' as 'confirmed', totalUnitsConsumed: 0,leader:fakeLeader, totalFee: 0, hash: '', totalTransactions: 0, totalTransactionsVote: 0, height: 0, time: 0 })
-                // if(!isSecond) slots2[groupIdx].push({isFake: true, slot: groupIdx*4+1, totalTransactionsFiltered: 0, feeLevels: [0,0,0], feeAverage: 0, commitment:'fake' as 'confirmed', totalUnitsConsumed: 0,leader:fakeLeader, totalFee: 0, hash: '', totalTransactions: 0, totalTransactionsVote: 0, height: 0, time: 0 })
-                // if(!isThird) slots2[groupIdx].push({isFake: true, slot: groupIdx*4+2, totalTransactionsFiltered: 0, feeLevels: [0,0,0], feeAverage: 0, commitment:'fake' as 'confirmed', totalUnitsConsumed: 0,leader:fakeLeader, totalFee: 0, hash: '', totalTransactions: 0, totalTransactionsVote: 0, height: 0, time: 0 })
-                // if(!isFourth) slots2[groupIdx].push({isFake: true, slot: groupIdx*4+3, totalTransactionsFiltered: 0, feeLevels: [0,0,0], feeAverage: 0, commitment:'fake' as 'confirmed', totalUnitsConsumed: 0,leader:fakeLeader, totalFee: 0, hash: '', totalTransactions: 0, totalTransactionsVote: 0, height: 0, time: 0 })
-              }
+
               slots2[groupIdx] = [...slots2[groupIdx], update].sort((a, b) => b.slot - a.slot).filter((elt, idx, arr) => {
                 // Вероятная причина дублей -- сваливание в queue мусора ото всех сторон
                 const sameIdx = arr.findIndex(sameElt => sameElt.slot === elt.slot)
@@ -145,9 +142,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get: () => WebSock
       socket.onmessage = function (e: MessageEvent) {
         queue.push(e)
         // Костыль для перфоманса, можно ставить 1 сек и обновления будет меньше
-        if (Date.now() - lastProcessedTime > 250) {
-          // Для отладки, чтобы мочь остановить поток данных
-          if ('devstop' in window && window.devstop === true) return;
+        if (!isLocked && Date.now() - lastProcessedTime > 250) {
           queue.length > 25 && console.log('queued from WS:', queue.length);
           queue.forEach(handleMessage)
           queue.length = 0;
@@ -253,5 +248,8 @@ export const useWebSocketStore = create<WebSocketState>((set, get: () => WebSock
         })
       }
     },
+    suspendQueue: (arg) => {
+      isLocked = arg
+    }
   }
 });

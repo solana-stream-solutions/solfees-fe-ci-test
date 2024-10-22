@@ -25,6 +25,7 @@ import {Footer} from "../components/layout/Footer.tsx";
 import {PlotLayer} from "../components/layout/PlotLayer.tsx";
 import {prepareValidatorRow} from "../common/prepareValidatorRow.ts";
 import {EarnedSol} from "../components/ui/EarnedSol.tsx";
+import {NextSlotInformer} from "../components/layout/NextSlotInformer.tsx";
 
 
 const ButtonWithTooltip = withTooltip({content: 'Тултип сверху'})(Button);
@@ -239,7 +240,7 @@ const CustomTable = ({
   return <div className="w-full h-full overflow-x-auto">
     <Table className="overflow-scroll" columns={columns} rows={deferredValue}
            style={{maxHeight: '100%'}}
-           virtualScroll={true}
+           virtualScroll={false}
            resizable={undefined}/>
   </div>
 }
@@ -268,6 +269,7 @@ export const HomeNew = (): FunctionComponent => {
         <Epoch/>
       </div>
       <PlotLayer/>
+      <NextSlotInformer />
       <CustomTable onEditFee={setEditedFeeIdx} onEditKeys={filterModalControls.on}/>
       <ModalFee editedFeeIdx={editedFeeIdx} isVisible={editedFeeIdx >= 0} onClose={() => setEditedFeeIdx(-1)}/>
       <ModalFilter isVisible={filterModalShown} onClose={filterModalControls.off}/>

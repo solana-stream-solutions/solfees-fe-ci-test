@@ -24,6 +24,7 @@ import {IconFeed} from "../components/ui/IconFeed.tsx";
 import {ModalFilter} from "../components/ui/ModalFilter.tsx";
 import {percentFromStore} from "../common/utils.ts";
 import {ModalFee} from "../components/ui/ModalFee.tsx";
+import {CustomRow} from "../common/prepareValidatorRow.ts";
 
 
 
@@ -126,7 +127,7 @@ const CustomTable = ({
       align: 'right',
       accessor: 'computeUnits',
       control: ({column}) => (<InfoButton content={column.title as string} direction={'downCenter'}/>),
-      renderCell: (row) => <ComputeUnits items={row.computeUnits}/>,
+      renderCell: (row) => <ComputeUnits items={row.computeUnits as unknown as CustomRow["computeUnits"]}/>,
     }, {
       title: 'Earned SOL',
       align: 'right',
@@ -138,7 +139,7 @@ const CustomTable = ({
       accessor: 'averageFee',
       align: 'right',
       control: ({column}) => (<InfoButton content={column.title as string} direction={'downCenter'}/>),
-      renderCell: (row) => <SimpleCell list={row.averageFee}/>,
+      renderCell: (row) => <SimpleCell list={row.averageFee as unknown as number[]}/>,
     }, {
       title: 'Fee p' + percentFromStore(percents[0]),
       accessor: 'fee0',

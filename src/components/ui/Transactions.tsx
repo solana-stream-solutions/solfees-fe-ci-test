@@ -24,7 +24,12 @@ function buildTransactions(slots: CustomRow['transactions'], withFiltered = fals
     }
     return colFiltered + colOne + ' / ' + colSecond
   })
-  return aligned
+  const hasDupes = new Set(aligned).size !== aligned.length
+  const alignedWithKeys = aligned.map((value, idx) => {
+    const key = hasDupes ? `${idx}-value` : value
+    return {key, value}
+  })
+  return alignedWithKeys
 }
 
 export const Transactions = ({items}: Props) => {
@@ -33,8 +38,9 @@ export const Transactions = ({items}: Props) => {
 
 
   return <div className="px-3 text-right">
-    {buildTransactions(items, hasRO || hasRW).map(elt => <Text key={elt} font="mono"
-                                                               className="whitespace-pre">{elt}</Text>)}
+    {buildTransactions(items, hasRO || hasRW).map(elt => <Text key={elt.key}
+                                                               font="mono"
+                                                               className="whitespace-pre">{elt.value}</Text>)}
   </div>
 
 }
