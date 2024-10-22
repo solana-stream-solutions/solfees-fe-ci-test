@@ -42,85 +42,10 @@ interface ServerAnswerFees {
 }
 
 
-interface ServerAnswerSchedule {
-result: null|EpochSchedule
-}
-
-interface EpochSchedule {
-  indices: number[];
-  leaders: string[];
-}
-
-let isRequested = false;
-let requestFailedAt = new Date(Date.now() - 9999);
-let savedEpoch = 0;
-let savedSchedule:EpochSchedule  = {
-  indices: [],
-  leaders: [],
-}
-async function fetchSchedule(epoch: number):Promise<null|EpochSchedule> {
-  if(!epoch) return null;
-  if(isRequested) return null;
-  if(requestFailedAt && Date.now() - requestFailedAt.getTime() > 5_000) {
-    try {
-      isRequested = true;
-      // Запросить эпоху
-      // Если всё ок то вернуть норм результат
-      const response = await fetch('https://api.solfees.io/api/solfees', {
-        method: 'POST',
-        body: JSON.stringify({
-          method: 'getLeaderSchedule',
-          jsonrpc: '2.0',
-          params: [
-            {epoch},
-          ],
-          id: '1',
-        }),
-      });
-      const serverData = await response.json() as ServerAnswerSchedule;
-      if(serverData.result === null) {
-        requestFailedAt = new Date();
-        return null;
-      }
-      return serverData.result
 
 
-    } catch (e) {
-      console.warn(e)
-      requestFailedAt = new Date()
-    } finally {
-      isRequested = false;
-    }
-  }
-return null;
-}
-async function updateSchedule(slot: number){
-  const epoch = (slot / 432_000) | 0
-  if(epoch && epoch !== savedEpoch) {
-    const data = await fetchSchedule(epoch)
-    if(data) {
-      savedSchedule = data;
-      savedEpoch = epoch;
-      saveSchedule(epoch, data)
-    }
-  }
-}
-function loadSchedule() {
-  const epochFromLS = localStorage.getItem('savedEpoch');
-  if(epochFromLS) {
-    const dataFromLS = localStorage.getItem('savedSchedule')
-    if(dataFromLS) {
-      savedEpoch = +epochFromLS
-      savedSchedule = JSON.parse(dataFromLS) as EpochSchedule
-    }
-  }
-}
-function saveSchedule(epoch:number, schedule: EpochSchedule) {
-  localStorage.setItem('savedEpoch', epoch.toString())
-  localStorage.setItem('savedSchedule', JSON.stringify(schedule))
-}
 
-
+window.devstop = true;
 
 export const useWebSocketStore = create<WebSocketState>((set, get: () => WebSocketState) => {
   const queue: MessageEvent[] = [];
@@ -140,7 +65,6 @@ export const useWebSocketStore = create<WebSocketState>((set, get: () => WebSock
         const data = typeof(event.data)!== 'string' ? event.data : JSON.parse(event.data) as any
         if (data.result.slot) {
           const update = data.result.slot as SlotContent
-          updateSchedule(update.slot).then(void 0)
           {
             const groupIdx = (update.slot / 4) | 0;
 
@@ -191,7 +115,6 @@ export const useWebSocketStore = create<WebSocketState>((set, get: () => WebSock
         }
         if (data.result.status) {
           const update = data.result.status as StatusUpdate
-          updateSchedule(update.slot).then(void 0)
           {
             const groupIdx = (update.slot / 4) | 0;
 
@@ -200,6 +123,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get: () => WebSock
               // console.warn('no update for groupId:', groupIdx, 'slot:', update.slot, update.commitment)
               return;
             }
+            // test
 
             const newSlots = slots2[groupIdx].map(elt => {
               if (elt.slot === update.slot) return {...elt, ...update}

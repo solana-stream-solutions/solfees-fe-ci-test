@@ -1,5 +1,5 @@
 import {useWebSocketStore} from "../../store/websocketStore.ts";
-import {useMemo} from "react";
+import {useEffect, useMemo} from "react";
 import {withTooltip} from "@consta/uikit/withTooltip";
 import {Text} from "@consta/uikit/Text";
 
@@ -59,6 +59,10 @@ export const Epoch = () => {
     }
     return '...'
   }, [lastSlot])
+
+  useEffect(() => {
+    updateSchedule(number).then(void 0)
+  }, [number]);
 
   return <div className="flex-col justify-start items-end gap-1 inline-flex">
     <div className="self-stretch justify-between items-end inline-flex">
