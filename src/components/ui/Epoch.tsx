@@ -2,6 +2,8 @@ import {useWebSocketStore} from "../../store/websocketStore.ts";
 import {useEffect, useMemo} from "react";
 import {withTooltip} from "@consta/uikit/withTooltip";
 import {Text} from "@consta/uikit/Text";
+import {useScheduleStore} from "../../store/scheduleStore.ts";
+import {useShallow} from "zustand/react/shallow";
 
 function formatDuration(seconds: number) {
   const days = Math.floor(seconds / (24 * 3600));
@@ -19,9 +21,8 @@ const TextWithTooltip = withTooltip({content: 'Тултип сверху'})(Text
 
 export const Epoch = () => {
 
-  const {
-          slots2,
-        } = useWebSocketStore();
+  const slots2 = useWebSocketStore(state => state.slots2);
+  const updateSchedule = useScheduleStore(useShallow(state => state.updateSchedule));
 
   const lastSlot = useMemo(() => {
     const idx = Math.max(...Object.keys(slots2).map(Number));
@@ -61,8 +62,8 @@ export const Epoch = () => {
   }, [lastSlot])
 
   useEffect(() => {
-    updateSchedule(number).then(void 0)
-  }, [number]);
+    updateSchedule(lastSlot).then(void 0)
+  }, [lastSlot]);
 
   return <div className="flex-col justify-start items-end gap-1 inline-flex">
     <div className="self-stretch justify-between items-end inline-flex">

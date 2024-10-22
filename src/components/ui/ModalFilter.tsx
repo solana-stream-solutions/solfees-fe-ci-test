@@ -11,10 +11,14 @@ type ModalFilterProps = {
   onClose: () => void;
 }
 
+const predefinedList = [
+  'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+]
+
 export const ModalFilter = ({
-                       isVisible,
-                       onClose,
-                     }: ModalFilterProps) => {
+                              isVisible,
+                              onClose,
+                            }: ModalFilterProps) => {
   const [rwValue, setRwValue] = useState('');
   const [roValue, setRoValue] = useState('');
   const savedReadonlyKeys = useWebSocketStore(useShallow(state => state.readonlyKeys))
@@ -37,6 +41,11 @@ export const ModalFilter = ({
     }
   }, [isVisible])
 
+  const appendRo = useCallback((token: string) => setRoValue(prev => {
+    const isEmpty = !prev.length
+    return isEmpty ? token : prev + "\n" + token
+  }), [])
+
   return <Modal
     isOpen={isVisible}
     hasOverlay
@@ -47,6 +56,12 @@ export const ModalFilter = ({
     <Text as="h1" size="2xl" view="primary">
       Filter transactions
     </Text>
+    <div>
+      <Text as="h2" weight="medium" view="secondary">Predefined values:</Text>
+      {predefinedList.map(token => <Text onClick={() => appendRo(token)} key={token} as="div" view="link"
+                                         className="cursor-pointer hover:underline">TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA</Text>)}
+    </div>
+
     <div className="flex flex-col gap-2">
       <TextField
         className="min-w-80 custom-nowrap-textarea"

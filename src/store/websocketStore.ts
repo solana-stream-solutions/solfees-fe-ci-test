@@ -45,7 +45,6 @@ interface ServerAnswerFees {
 
 
 
-window.devstop = true;
 
 export const useWebSocketStore = create<WebSocketState>((set, get: () => WebSocketState) => {
   const queue: MessageEvent[] = [];
@@ -181,6 +180,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get: () => WebSock
         }),
       });
       const serverData = await response.json() as ServerAnswerFees;
+      // Я же сообщения из HTTP добавляю в конец очереди, а надо в начало. Вероятно стоит переиграть, если баги будут
       serverData.result.forEach(result => {
         queue.push(new MessageEvent('fromJs',{data: {result}}))
       })
@@ -191,7 +191,6 @@ export const useWebSocketStore = create<WebSocketState>((set, get: () => WebSock
 
 
   setTimeout(() => {
-    loadSchedule();
     const url = 'wss://api.solfees.io/api/solfees/ws'
     const socket = new WebSocket(url);
 
