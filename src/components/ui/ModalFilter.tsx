@@ -11,10 +11,6 @@ type ModalFilterProps = {
   onClose: () => void;
 }
 
-const predefinedList = [
-  'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
-]
-
 export const ModalFilter = ({
                               isVisible,
                               onClose,
@@ -58,8 +54,8 @@ export const ModalFilter = ({
     </Text>
     <div>
       <Text as="h2" weight="medium" view="secondary">Predefined values:</Text>
-      {predefinedList.map(token => <Text onClick={() => appendRo(token)} key={token} as="div" view="link"
-                                         className="cursor-pointer hover:underline">TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA</Text>)}
+      <Text onClick={() => appendRo('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')} as="div" view="link"
+            className="cursor-pointer hover:underline">Tokenkeg</Text>
     </div>
 
     <div className="flex flex-col gap-2">

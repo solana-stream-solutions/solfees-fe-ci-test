@@ -23,6 +23,8 @@ import {percentFromStore} from "../common/utils.ts";
 import {ModalFee} from "../components/ui/ModalFee.tsx";
 import {Footer} from "../components/layout/Footer.tsx";
 import {PlotLayer} from "../components/layout/PlotLayer.tsx";
+import {prepareValidatorRow} from "../common/prepareValidatorRow.ts";
+import {EarnedSol} from "../components/ui/EarnedSol.tsx";
 
 
 const ButtonWithTooltip = withTooltip({content: 'Тултип сверху'})(Button);
@@ -32,25 +34,6 @@ const InfoButton = (props: TooltipProps): ReactNode => {
                             tooltipProps={props}/>
 }
 
-function buildTransactions(slots: SlotContent[], withFiltered = false) {
-  const zero = slots.map(elt => elt.totalTransactionsFiltered)
-  const maxZero = `${Math.max(...zero)}`.length
-  const first = slots.map(elt => elt.totalTransactions - elt.totalTransactionsVote)
-  const maxFirst = `${Math.max(...first)}`.length
-  const second = slots.map(elt => elt.totalTransactions)
-  const maxSecond = `${Math.max(...second)}`.length
-  const aligned = slots.map((_, idx) => {
-    const colOne = `${first[idx]}`.padStart(maxFirst, ' ');
-    const colSecond = `${second[idx]}`.padStart(maxSecond, ' ');
-    let colFiltered = ''
-    if (withFiltered) {
-      colFiltered = `${zero[idx]}`.padStart(maxZero, ' ');
-      colFiltered += ' / '
-    }
-    return colFiltered + colOne + ' / ' + colSecond
-  })
-  return aligned
-}
 
 type TableProps = {
   onEditFee: (idx: number) => void
@@ -78,38 +61,9 @@ const CustomTable = ({
 
   const rowsFromSocket2 = useMemo(() => {
     const unsorted = slots2 as Record<string, SlotContent[]>
-    const result = Object.entries(unsorted).sort((a, b) => Number(a[0]) - Number(b[0])).map(([id, slots]) => {
-      const leader = slots[0]?.leader || 'UNKNOWN'
-      return {
-        id,
-        leader,
-        slots: slots.map(elt => ({
-          commitment: elt.commitment,
-          slot: elt.slot,
-        })),
-        transactions: buildTransactions(slots, isTransactionsApplied),
-        computeUnits: slots.map(elt => ({
-          amount: elt.totalUnitsConsumed.toLocaleString('en-US', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          }),
-          percent: (elt.totalUnitsConsumed / 48_000_000 * 100).toFixed(2),
-        })),
-        earnedSol: slots.map(elt => {
-          const value = elt.totalFee / 1e9;
-          return value > 1 ? value.toLocaleString('unknown', {
-            maximumFractionDigits: 9,
-            minimumFractionDigits: 9,
-          }).replace(/\s/g, '') : value.toFixed(9)
-        }),
-        averageFee: slots.map(elt => elt.feeAverage.toLocaleString('en-US', {maximumFractionDigits: 2})),
-        fee0: slots.map(elt => (elt.feeLevels[0] || 0).toLocaleString('en-US', {maximumFractionDigits: 2})),
-        fee1: slots.map(elt => (elt.feeLevels[1] || 0).toLocaleString('en-US', {maximumFractionDigits: 2})),
-        fee2: slots.map(elt => (elt.feeLevels[2] || 0).toLocaleString('en-US', {maximumFractionDigits: 2})),
-      }
-    })
+    const result = Object.entries(unsorted).sort((a, b) => Number(a[0]) - Number(b[0])).map(prepareValidatorRow)
     return [...result].reverse();
-  }, [slots2, isTransactionsApplied])
+  }, [slots2])
 
   const columns: TableColumn<typeof rowsFromSocket2[number]>[] = useMemo(() => {
     return [
@@ -165,7 +119,7 @@ const CustomTable = ({
         >
           {title}
         </HeaderDataCell>,
-        renderCell: ({row}) => <SimpleCell list={row.earnedSol}/>,
+        renderCell: ({row}) => <EarnedSol list={row.earnedSol}/>,
 
       }, {
         title: 'Average Fee',
