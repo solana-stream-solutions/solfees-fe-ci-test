@@ -6,6 +6,7 @@ import {TextField} from "@consta/uikit/TextField";
 import {Chips} from "@consta/uikit/Chips";
 import {Button} from "@consta/uikit/Button";
 import {percentFromStore} from "../../common/utils.ts";
+import {useShallow} from "zustand/react/shallow";
 
 type ModalFeeProps = {
   isVisible: boolean;
@@ -19,19 +20,10 @@ export const ModalFee = ({
                     onClose,
                     editedFeeIdx,
                   }: ModalFeeProps) => {
-  const fees = useWebSocketStore(state => state.percents)
-  const updatePercents = useWebSocketStore(state => state.updatePercents)
-  const updateSubscription = useWebSocketStore(state => state.updateSubscription)
-  const {
-          disconnect,
-          connect,
-        } = useWebSocketStore(({
-                                 disconnect,
-                                 connect,
-                               }) => (({
-    disconnect,
-    connect,
-  })))
+  const fees = useWebSocketStore(useShallow(state => state.percents))
+  const updatePercents = useWebSocketStore(useShallow(state => state.updatePercents))
+  const updateSubscription = useWebSocketStore(useShallow(state => state.updateSubscription))
+
   const [feeValue, setFeeValue] = useState('');
   useLayoutEffect(() => {
     if (isVisible) {
@@ -45,9 +37,7 @@ export const ModalFee = ({
       return elt;
     })
     updatePercents(newPercents)
-    // updateSubscription();
-    disconnect();
-    connect();
+    updateSubscription();
     onClose();
   }
   return <Modal

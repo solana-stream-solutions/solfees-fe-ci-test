@@ -12,7 +12,7 @@ export const ComputeUnits = ({items}: Props) => {
     {items.map(({
                   amount,
                   percent,
-                }) => <div key={amount}
+                }, idx) => <div key={+amount === 0 ? idx : amount}
       className="flex justify-end text-right gap-1 shrink-0">
       <Text font="mono">{amount}</Text><Text font="mono">({percent}%)</Text></div>)}
   </div>

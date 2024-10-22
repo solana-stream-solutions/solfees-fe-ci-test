@@ -64,8 +64,6 @@ const CustomTable = ({
                        onEditKeys,
                      }: TableProps) => {
   const slots2 = useWebSocketStore(state => state.slots2);
-  const disconnect = useWebSocketStore(state => state.disconnect)
-  const connect = useWebSocketStore(state => state.connect)
   const percents = useWebSocketStore(state => state.percents)
   const readonlyKeys = useWebSocketStore(state => state.readonlyKeys)
   const readwriteKeys = useWebSocketStore(state => state.readwriteKeys)
@@ -159,15 +157,6 @@ const CustomTable = ({
       control: () => (<Button as="span" iconSize="s" onlyIcon={true} view="clear" iconRight={IconAdd}/>),
     },
   ];
-
-  useEffect(() => {
-    console.log('effect with connect!');
-    connect();
-
-    return () => {
-      disconnect();
-    };
-  }, [connect, disconnect]);
 
   if (!rowsFromSocket2.length) return <span
     className="w-full text-center text-xl font-bold">Loading...</span>

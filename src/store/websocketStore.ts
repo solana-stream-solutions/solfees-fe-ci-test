@@ -1,6 +1,5 @@
 import {create} from "zustand";
 
-
 export interface SlotContent {
   commitment: CommitmentStatus;
   feeAverage: number;
@@ -26,131 +25,180 @@ export type CommitmentStatus = 'processed' | 'confirmed' | 'finalized';
 
 interface WebSocketState {
   socket: WebSocket | null;
-  isConnected: boolean;
   slots2: Record<string, SlotContent[]>
   readonlyKeys: string[],
   readwriteKeys: string[],
   percents: number[],
-  connect: () => void;
-  disconnect: () => void;
   updateSubscription: () => void;
   updatePercents: (arg: number[]) => void;
   updateReadonlyKeys: (arg: string[]) => void;
   updateReadwriteKeys: (arg: string[]) => void;
 }
 
-interface ServerAnswer {
+interface ServerAnswerFees {
   result: Array<{
     slot: SlotContent
   }>
 }
 
 
-export const useWebSocketStore = create<WebSocketState>((set) => ({
-  socket: null,
-  isConnected: false,
-  slots2: {},
-  readonlyKeys: [],
-  readwriteKeys: [],
-  percents: [2000, 5000, 9000],
-  updatePercents: (percents) => {
-    set({percents})
-  },
-  updateReadonlyKeys: (readonlyKeys) => {
-    if(JSON.stringify(readonlyKeys) === JSON.stringify([""])) {
-      set({readonlyKeys: []})
-      return;
-    }
-    set({readonlyKeys})
-  },
-  updateReadwriteKeys: (readwriteKeys) => {
-    // сюда еще проверку валидности ключа надо положить, пока обработал корнеркейсы
-    if(JSON.stringify(readwriteKeys) === JSON.stringify([""])) {
-      set({readwriteKeys: []})
-      return;
-    }
-    set({readwriteKeys})
-  },
-  updateSubscription: () => {
-    set((state: WebSocketState) => {
-      if(state.socket) {
-        const data = {
-          "id": 0,
-          "method": "SlotsSubscribe",
-          "params": {
-            "readWrite": state.readwriteKeys,
-            "readOnly": state.readonlyKeys,
-            "levels": state.percents,
-          },
-        }
-        state.socket.send(JSON.stringify(data))
+interface ServerAnswerSchedule {
+result: null|EpochSchedule
+}
+
+interface EpochSchedule {
+  indices: number[];
+  leaders: string[];
+}
+
+let isRequested = false;
+let requestFailedAt = new Date(Date.now() - 9999);
+let savedEpoch = 0;
+let savedSchedule:EpochSchedule  = {
+  indices: [],
+  leaders: [],
+}
+async function fetchSchedule(epoch: number):Promise<null|EpochSchedule> {
+  if(!epoch) return null;
+  if(isRequested) return null;
+  if(requestFailedAt && Date.now() - requestFailedAt.getTime() > 5_000) {
+    try {
+      isRequested = true;
+      // Запросить эпоху
+      // Если всё ок то вернуть норм результат
+      const response = await fetch('https://api.solfees.io/api/solfees', {
+        method: 'POST',
+        body: JSON.stringify({
+          method: 'getLeaderSchedule',
+          jsonrpc: '2.0',
+          params: [
+            {epoch},
+          ],
+          id: '1',
+        }),
+      });
+      const serverData = await response.json() as ServerAnswerSchedule;
+      if(serverData.result === null) {
+        requestFailedAt = new Date();
+        return null;
       }
-      return state;
-    })
-  },
-  connect: () => {
-    set((state: WebSocketState) => {
-      const queue: MessageEvent[] = [];
-      let lastProcessedTime = Date.now();
+      return serverData.result
 
-      if (state.socket) return state
 
-      const url = 'wss://api.solfees.io/api/solfees/ws'
-      const socket = new WebSocket(url);
+    } catch (e) {
+      console.warn(e)
+      requestFailedAt = new Date()
+    } finally {
+      isRequested = false;
+    }
+  }
+return null;
+}
+async function updateSchedule(slot: number){
+  const epoch = (slot / 432_000) | 0
+  if(epoch && epoch !== savedEpoch) {
+    const data = await fetchSchedule(epoch)
+    if(data) {
+      savedSchedule = data;
+      savedEpoch = epoch;
+      saveSchedule(epoch, data)
+    }
+  }
+}
+function loadSchedule() {
+  const epochFromLS = localStorage.getItem('savedEpoch');
+  if(epochFromLS) {
+    const dataFromLS = localStorage.getItem('savedSchedule')
+    if(dataFromLS) {
+      savedEpoch = +epochFromLS
+      savedSchedule = JSON.parse(dataFromLS) as EpochSchedule
+    }
+  }
+}
+function saveSchedule(epoch:number, schedule: EpochSchedule) {
+  localStorage.setItem('savedEpoch', epoch.toString())
+  localStorage.setItem('savedSchedule', JSON.stringify(schedule))
+}
 
-      socket.onopen = () => {
-        set({socket});
-        state.updateSubscription();
+
+
+export const useWebSocketStore = create<WebSocketState>((set, get: () => WebSocketState) => {
+  const queue: MessageEvent[] = [];
+  let lastProcessedTime = Date.now();
+
+  function routeMessages(target: 'queue' | 'store'): void {
+    const socket = get().socket
+    if (!socket) return
+
+    if (target === 'queue') {
+      queue.length = 0;
+      socket.onmessage = (event) => {
+        queue.push(event)
       };
-      socket.onclose = () => {
-        set({
-          socket: null,
-          isConnected: false,
-        });
-      };
-      socket.onerror = (error) => {
-        console.error("WebSocket error:", error);
-      };
+    } else if (target === 'store') {
       const handleMessage = (event: MessageEvent) => {
-        // Для отладки, чтобы мочь остановить поток данных
-        if('devstop' in window && window.devstop === true) return;
-        const data = JSON.parse(event.data) as any
+        const data = typeof(event.data)!== 'string' ? event.data : JSON.parse(event.data) as any
         if (data.result.slot) {
           const update = data.result.slot as SlotContent
-          set((state: WebSocketState) => {
-            const groupIdx = (update.slot/4)|0;
+          updateSchedule(update.slot).then(void 0)
+          {
+            const groupIdx = (update.slot / 4) | 0;
 
-            const slots2 = state.slots2;
-            if(slots2[groupIdx]) {
-              slots2[groupIdx] = [...slots2[groupIdx], update].sort((a,b) => b.slot - a.slot);
+            const slots2 = get().slots2;
+            if (slots2[groupIdx]) {
+              slots2[groupIdx] = [...slots2[groupIdx], update].sort((a, b) => b.slot - a.slot).filter((elt, idx, arr) => {
+                // Вероятная причина дублей -- сваливание в queue мусора ото всех сторон
+                const sameIdx = arr.findIndex(sameElt => sameElt.slot === elt.slot)
+                return sameIdx === idx
+              });
+              if(slots2[groupIdx].length !== 4) {
+                const slots = slots2[groupIdx]
+                const isFirst = slots.find(elt => elt.slot / 4 % 1 === 0)
+                const isSecond = slots.find(elt => elt.slot / 4 % 1 === 0.25)
+                const isThird = slots.find(elt => elt.slot / 4 % 1 === 0.5)
+                const isFourth = slots.find(elt => elt.slot / 4 % 1 === 0.75)
+                // Знаем какого элемента нет, можем его фейково добавить
+                // TODO глючит сильно, надо перерабатывать commitment чтобы был статус LOST и по нему уже делать. Сейчас есть проблемы
+                // const fakeLeader = 'FAKE_LEADER'
+                // if(!isFirst) slots2[groupIdx].push({isFake: true, slot: groupIdx*4+0, totalTransactionsFiltered: 0, feeLevels: [0,0,0], feeAverage: 0, commitment:'fake' as 'confirmed', totalUnitsConsumed: 0,leader:fakeLeader, totalFee: 0, hash: '', totalTransactions: 0, totalTransactionsVote: 0, height: 0, time: 0 })
+                // if(!isSecond) slots2[groupIdx].push({isFake: true, slot: groupIdx*4+1, totalTransactionsFiltered: 0, feeLevels: [0,0,0], feeAverage: 0, commitment:'fake' as 'confirmed', totalUnitsConsumed: 0,leader:fakeLeader, totalFee: 0, hash: '', totalTransactions: 0, totalTransactionsVote: 0, height: 0, time: 0 })
+                // if(!isThird) slots2[groupIdx].push({isFake: true, slot: groupIdx*4+2, totalTransactionsFiltered: 0, feeLevels: [0,0,0], feeAverage: 0, commitment:'fake' as 'confirmed', totalUnitsConsumed: 0,leader:fakeLeader, totalFee: 0, hash: '', totalTransactions: 0, totalTransactionsVote: 0, height: 0, time: 0 })
+                // if(!isFourth) slots2[groupIdx].push({isFake: true, slot: groupIdx*4+3, totalTransactionsFiltered: 0, feeLevels: [0,0,0], feeAverage: 0, commitment:'fake' as 'confirmed', totalUnitsConsumed: 0,leader:fakeLeader, totalFee: 0, hash: '', totalTransactions: 0, totalTransactionsVote: 0, height: 0, time: 0 })
+              }
+              slots2[groupIdx] = [...slots2[groupIdx], update].sort((a, b) => b.slot - a.slot).filter((elt, idx, arr) => {
+                // Вероятная причина дублей -- сваливание в queue мусора ото всех сторон
+                const sameIdx = arr.findIndex(sameElt => sameElt.slot === elt.slot)
+                return sameIdx === idx
+              });
+
             } else {
               slots2[groupIdx] = [update]
               const keys = Object.keys(slots2);
-              if(keys.length > 38) {
+              if (keys.length > 38) {
                 const target = Math.min(...keys.map(Number))
                 delete slots2[target]
                 // Удаление целой группы негативно влияет на восприятие графиков, может тут надо по одному удалять?
-                // или помечать такую группу к удалению. надо подумать
+                // Или помечать такую группу к удалению. Надо подумать
               }
             }
 
 
-            return {
-              ...state,
-              slots2:{...slots2},
-            };
-          })
+            set({
+              slots2,
+            });
+          }
           return;
         }
         if (data.result.status) {
           const update = data.result.status as StatusUpdate
-          set((state: WebSocketState) => {
-            const groupIdx = (update.slot/4)|0;
+          updateSchedule(update.slot).then(void 0)
+          {
+            const groupIdx = (update.slot / 4) | 0;
 
-            const slots2 = state.slots2;
-            if(!slots2[groupIdx]) {
+            const slots2 = get().slots2;
+            if (!slots2[groupIdx]) {
               // console.warn('no update for groupId:', groupIdx, 'slot:', update.slot, update.commitment)
-              return state;
+              return;
             }
 
             const newSlots = slots2[groupIdx].map(elt => {
@@ -159,82 +207,128 @@ export const useWebSocketStore = create<WebSocketState>((set) => ({
             })
             slots2[groupIdx] = newSlots;
 
-            return {
-              ...state,
+            set({
               slots2: {...slots2},
-            };
-          })
+            })
+          }
           return;
         }
-        if(data.result === 'subscribed') {
+        if (data.result === 'subscribed') {
           // Это сообщение, что подписка удалась и нет проблем
           return;
         }
         console.warn('unrecognized', data);
       }
-      socket.onmessage = (event) => {
-        queue.push(event)
-      };
+      socket.onmessage = function (e: MessageEvent) {
+        queue.push(e)
+        // Костыль для перфоманса, можно ставить 1 сек и обновления будет меньше
+        if (Date.now() - lastProcessedTime > 250) {
+          // Для отладки, чтобы мочь остановить поток данных
+          if ('devstop' in window && window.devstop === true) return;
+          queue.length > 25 && console.log('queued from WS:', queue.length);
+          queue.forEach(handleMessage)
+          queue.length = 0;
+          lastProcessedTime = Date.now();
+        }
+      }
+      queue.forEach(handleMessage)
+      queue.length = 0;
+    } else {
+      console.warn('unknown target', target);
+    }
+  }
 
-
-      fetch('https://api.solfees.io/api/solfees', {
+  async function fetchFromHttp(): Promise<void> {
+    try {
+      // set({slots2: {}})
+      const response = await fetch('https://api.solfees.io/api/solfees', {
         method: 'POST',
         body: JSON.stringify({
           method: 'getRecentPrioritizationFees',
           jsonrpc: '2.0',
           params: [
             {
-              "readWrite": state.readwriteKeys,
-              "readOnly": state.readonlyKeys,
-              "levels": state.percents,
+              "readWrite": get().readwriteKeys,
+              "readOnly": get().readonlyKeys,
+              "levels": get().percents,
             },
           ],
           id: '1',
         }),
+      });
+      const serverData = await response.json() as ServerAnswerFees;
+      serverData.result.forEach(result => {
+        queue.push(new MessageEvent('fromJs',{data: {result}}))
       })
-      .then(response => response.json() as Promise<ServerAnswer>)
-      .then(serverData => {
-        //----
-        const slots2 = serverData.result.reduce((acc, elt) => {
-          const groupIdx = (elt.slot.slot/4)|0;
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  }
 
-          acc[groupIdx]  = acc[groupIdx] || [];
-          acc[groupIdx].push(elt.slot);
-          return acc;
-        }, {} as Record<string, SlotContent[]>)
 
-        //----
-        set({
-          isConnected: true,
-          slots2,
-        })
-        socket.onmessage = function (e: MessageEvent) {
-          queue.push(e)
-          // Костыль для перфоманса, можно ставить 1 сек и обновления будет меньше
-          if(Date.now() - lastProcessedTime > 250) {
-            queue.length > 25 && console.log('queued from WS:', queue.length);
-            queue.forEach(handleMessage)
-            queue.length = 0;
-            lastProcessedTime = Date.now();
-          }
-        }
-        queue.forEach(handleMessage)
-        queue.length = 0;
-      })
-      .catch(error => console.error('Error:', error));
+  setTimeout(() => {
+    loadSchedule();
+    const url = 'wss://api.solfees.io/api/solfees/ws'
+    const socket = new WebSocket(url);
 
-      return state;
-    })
-  },
-  disconnect: () => {
-    set((state) => {
-      state.socket?.close();
-      return {
+    socket.onopen = () => {
+      set({socket});
+      get().updateSubscription();
+    };
+    socket.onclose = () => {
+      set({
         socket: null,
-        isConnected: false,
-      };
-    });
-  },
-}));
-// можешь пока закинуть в табличку slot, commitment, total_transactions, fee_average, total_units_consumed
-// т.е. добавляешь слот в табличку, потом при статусе меняешь коммитмент
+      });
+    };
+    socket.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
+  }, 125);
+
+
+  return {
+    socket: null,
+    slots2: {},
+    readonlyKeys: [],
+    readwriteKeys: [],
+    percents: [2000, 5000, 9000],
+    updatePercents: (percents) => {
+      set({percents})
+    },
+    updateReadonlyKeys: (readonlyKeys) => {
+      if (JSON.stringify(readonlyKeys) === JSON.stringify([""])) {
+        set({readonlyKeys: []})
+        return;
+      }
+      set({readonlyKeys})
+    },
+    updateReadwriteKeys: (readwriteKeys) => {
+      // сюда еще проверку валидности ключа надо положить, пока обработал корнеркейсы
+      if (JSON.stringify(readwriteKeys) === JSON.stringify([""])) {
+        set({readwriteKeys: []})
+        return;
+      }
+      set({readwriteKeys})
+    },
+    updateSubscription: () => {
+      const socket = get().socket;
+      if (socket) {
+        const data = {
+          "id": 0,
+          "method": "SlotsSubscribe",
+          "params": {
+            "readWrite": get().readwriteKeys,
+            "readOnly": get().readonlyKeys,
+            "levels": get().percents,
+          },
+        }
+        socket.send(JSON.stringify(data))
+        routeMessages('queue')
+        fetchFromHttp().then(() => {
+          routeMessages('store')
+        })
+      }
+    },
+  }
+});

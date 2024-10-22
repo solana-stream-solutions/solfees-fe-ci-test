@@ -49,7 +49,7 @@ function buildTransactions(slots: SlotContent[], withFiltered = false) {
     const colOne = `${first[idx]}`.padStart(maxFirst, ' ');
     const colSecond = `${second[idx]}`.padStart(maxSecond, ' ');
     let colFiltered = ''
-    if(withFiltered) {
+    if (withFiltered) {
       colFiltered = `${zero[idx]}`.padStart(maxZero, ' ');
       colFiltered += ' / '
     }
@@ -69,8 +69,6 @@ const CustomTable = ({
                        onEditKeys,
                      }: TableProps) => {
   const slots2 = useWebSocketStore(state => state.slots2);
-  const disconnect = useWebSocketStore(state => state.disconnect)
-  const connect = useWebSocketStore(state => state.connect)
   const percents = useWebSocketStore(state => state.percents)
   const readonlyKeys = useWebSocketStore(state => state.readonlyKeys)
   const readwriteKeys = useWebSocketStore(state => state.readwriteKeys)
@@ -104,8 +102,11 @@ const CustomTable = ({
           percent: (elt.totalUnitsConsumed / 48_000_000 * 100).toFixed(2),
         })),
         earnedSol: slots.map(elt => {
-          const value = elt.totalFee/1e9;
-          return value > 1 ? value.toLocaleString('unknown', {maximumFractionDigits:9 , minimumFractionDigits: 9}).replace(/\s/g, '') : value.toFixed(9)
+          const value = elt.totalFee / 1e9;
+          return value > 1 ? value.toLocaleString('unknown', {
+            maximumFractionDigits: 9,
+            minimumFractionDigits: 9,
+          }).replace(/\s/g, '') : value.toFixed(9)
         }),
         averageFee: slots.map(elt => elt.feeAverage.toLocaleString('en-US', {maximumFractionDigits: 2})),
         fee0: slots.map(elt => (elt.feeLevels[0] || 0).toLocaleString('en-US', {maximumFractionDigits: 2})),
@@ -114,7 +115,7 @@ const CustomTable = ({
       }
     })
     return [...result].reverse();
-  }, [slots2])
+  }, [slots2, isTransactionsApplied])
 
   const columns: TableColumn<typeof rowsFromSocket2[number]>[] = useMemo(() => {
     return [
@@ -238,14 +239,6 @@ const CustomTable = ({
     ]
   }, [isTransactionsApplied, onEditKeys, percents, memoFee0, memoFee1, memoFee2]);
 
-  useEffect(() => {
-    connect();
-
-    return () => {
-      disconnect();
-    };
-  }, [connect, disconnect]);
-
   const deferredValue = useDeferredValue(rowsFromSocket2)
 
   // Этим проверял, что построение без UI KIT быстрее
@@ -348,7 +341,6 @@ const PlotLayer = () => {
           name="FeesControls"/>
         <ExampleAreaThree items={(value || []).map(elt => elt.value)}/>
       </div>
-
     </div>
   </>
 }
@@ -367,7 +359,7 @@ export const HomeNew = (): FunctionComponent => {
     <div className="px-20 py-5 bg-white w-full flex-col justify-start items-start gap-8 inline-flex h-[100vh] relative">
       <div className="self-stretch justify-between items-center inline-flex">
         <div className="justify-start items-center gap-2 flex">
-          <IconFeed className="w-5 h-5 relative"></IconFeed>
+          <IconFeed className="w-5 h-5 relative"/>
           <div className="text-center text-[#002033] text-2xl font-semibold font-['Inter'] leading-[31.20px]">Solfees
           </div>
           <div className="text-center text-[#002033]/60 text-sm font-normal font-['Inter'] leading-[21px]">Solana Fees
@@ -419,6 +411,7 @@ function nFormatter(num: number, digits = 0): string {
 function tickFormatter(value: number, _index: number): string {
   return nFormatter(value)
 }
+
 function tickFormatter2(value: number, _index: number): string {
   const newValue = value / 1e9;
   return newValue.toFixed(2)
@@ -463,14 +456,17 @@ const CustomTooltip: ContentType<any, any> = ({
   return null;
 };
 const CustomTooltip2: ContentType<any, any> = ({
-                                                active,
-                                                payload,
-                                              }) => {
+                                                 active,
+                                                 payload,
+                                               }) => {
   if (active && payload && payload.length) {
     if (payload[0]) {
       const elt = payload[0].payload;
-      const value = elt.y/1e9;
-      const valueInTooltip = value > 1 ? value.toLocaleString('unknown', {maximumFractionDigits:9 , minimumFractionDigits: 9}).replace(/\s/g, '') : value.toFixed(9)
+      const value = elt.y / 1e9;
+      const valueInTooltip = value > 1 ? value.toLocaleString('unknown', {
+        maximumFractionDigits: 9,
+        minimumFractionDigits: 9,
+      }).replace(/\s/g, '') : value.toFixed(9)
       return <div className="recharts-default-tooltip">
         <p className="recharts-tooltip-label">Slot: {elt.x.toLocaleString('en-US')} ({elt.commitment})</p>
         <ul className="recharts-tooltip-item-list">
@@ -519,8 +515,6 @@ type FeesInfo = {
 export const ExampleAreaOne = () => {
 
   const slots2 = useWebSocketStore(state => state.slots2);
-  // const disconnect = useWebSocketStore(state => state.disconnect)
-  // const connect = useWebSocketStore(state => state.connect)
 
   const [type, _setType] = useState<CurveType>('monotone');
 
@@ -595,8 +589,6 @@ export const ExampleAreaOne = () => {
 export const ExampleAreaOneBar = () => {
 
   const slots2 = useWebSocketStore(state => state.slots2);
-  // const disconnect = useWebSocketStore(state => state.disconnect)
-  // const connect = useWebSocketStore(state => state.connect)
 
   const [_type, _setType] = useState<CurveType>('monotone');
 
@@ -655,8 +647,6 @@ export const ExampleAreaOneBar = () => {
 export const ExampleAreaTwo = () => {
 
   const slots2 = useWebSocketStore(state => state.slots2);
-  // const disconnect = useWebSocketStore(state => state.disconnect)
-  // const connect = useWebSocketStore(state => state.connect)
 
   const [type, _setType] = useState<CurveType>('monotone');
 
@@ -730,8 +720,6 @@ export const ExampleAreaTwo = () => {
 export const ExampleAreaTwoBar = () => {
 
   const slots2 = useWebSocketStore(state => state.slots2);
-  // const disconnect = useWebSocketStore(state => state.disconnect)
-  // const connect = useWebSocketStore(state => state.connect)
 
   const [type, _setType] = useState<CurveType>('monotone');
 
@@ -817,8 +805,6 @@ function getColor(arg: string): string {
 export const ExampleAreaThree = ({items}: PropsAreaThree) => {
 
   const slots2 = useWebSocketStore(state => state.slots2);
-  // const disconnect = useWebSocketStore(state => state.disconnect)
-  // const connect = useWebSocketStore(state => state.connect)
 
   const [type, _setType] = useState<CurveType>('monotone');
 
@@ -866,7 +852,7 @@ export const ExampleAreaThree = ({items}: PropsAreaThree) => {
         <Area type={type} dataKey="y" stroke="gray" fill="gray" opacity={0.7}
               dot={false}
               isAnimationActive={false}/>
-        {items.map(elt => <Area type={type} dataKey={elt} stroke={getColor(elt)} fill={getColor(elt)} opacity={0.99}
+        {items.map(elt => <Area key={elt} type={type} dataKey={elt} stroke={getColor(elt)} fill={getColor(elt)} opacity={0.99}
                                 isAnimationActive={false}/>)}
       </ComposedChart>
     </ResponsiveContainer>

@@ -1,9 +1,10 @@
-import {useLayoutEffect, useState} from "react";
+import {useCallback, useLayoutEffect, useState} from "react";
 import {useWebSocketStore} from "../../store/websocketStore.ts";
 import {Modal} from "@consta/uikit/Modal";
 import {Text} from "@consta/uikit/Text";
 import {TextField} from "@consta/uikit/TextField";
 import {Button} from "@consta/uikit/Button";
+import {useShallow} from "zustand/react/shallow";
 
 type ModalFilterProps = {
   isVisible: boolean;
@@ -16,31 +17,19 @@ export const ModalFilter = ({
                      }: ModalFilterProps) => {
   const [rwValue, setRwValue] = useState('');
   const [roValue, setRoValue] = useState('');
-  const savedReadonlyKeys = useWebSocketStore(state => state.readonlyKeys)
-  const savedReadwriteKeys = useWebSocketStore(state => state.readwriteKeys)
-  const updateRo = useWebSocketStore(state => state.updateReadonlyKeys)
-  const updateRw = useWebSocketStore(state => state.updateReadwriteKeys)
-  const updateSubscription = useWebSocketStore(state => state.updateSubscription)
-  const {
-          disconnect,
-          connect,
-        } = useWebSocketStore(({
-                                 disconnect,
-                                 connect,
-                               }) => (({
-    disconnect,
-    connect,
-  })))
+  const savedReadonlyKeys = useWebSocketStore(useShallow(state => state.readonlyKeys))
+  const savedReadwriteKeys = useWebSocketStore(useShallow(state => state.readwriteKeys))
+  const updateRo = useWebSocketStore(useShallow(state => state.updateReadonlyKeys))
+  const updateRw = useWebSocketStore(useShallow(state => state.updateReadwriteKeys))
+  const updateSubscription = useWebSocketStore(useShallow(state => state.updateSubscription))
 
-  const onClickButton = () => {
+  const onClickButton = useCallback(() => {
     // Может быть проблема, что пишет массив с одним элементом "" (пустая строка). Уточнить потом.
     updateRo(roValue.split("\n"));
     updateRw(rwValue.split("\n"));
-    // updateSubscription();
-    disconnect();
-    connect();
+    updateSubscription();
     onClose();
-  }
+  }, [updateRo, roValue, updateRw, rwValue, onClose])
   useLayoutEffect(() => {
     if (isVisible) {
       setRoValue(savedReadonlyKeys.join("\n"))
